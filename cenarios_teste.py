@@ -297,7 +297,7 @@ def cenario_4_teste_limites(
         dt,
         t_degrau=300.0,
         valor_inicial=h_eq,
-        valor_final=h_max_seguro - 0.3,
+        valor_final=h_max_seguro - 0.4,
     )
     CC_ref = np.ones(int(tempo_total / dt) + 1) * C_eq
 
@@ -307,7 +307,7 @@ def cenario_4_teste_limites(
         dt,
         t_degrau=300.0,
         valor_inicial=h_eq,
-        valor_final=h_min_seguro + 0.2,
+        valor_final=h_min_seguro + 0.4,
     )
     CD_ref = np.ones(int(tempo_total / dt) + 1) * C_eq
 

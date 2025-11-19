@@ -37,7 +37,7 @@ def discretizar_modelo(
 
     Sistema discreto:
         x[k+1] = Ad*x[k] + Bd*u[k]
-        y[k] = Cd*x[k] + Dd*u[k]
+        y[k] = C*x[k] + D*u[k]
 
     Args:
         A: matriz de estado contínua
@@ -218,8 +218,17 @@ class ControladorMPC:
         u = cp.Variable((self.nu, self.Nc))  # controles futuros
         e_int = cp.Variable((self.ny, self.Np + 1))  # erros integrais
 
+        # Adiciona variáveis de folga para restrições de nível
+        slack_h = cp.Variable(
+            (self.Np + 1,), nonneg=True
+        )  # Folga para restrições de nível
+        peso_slack = 1e6  # Penalização alta para desencorajar uso
+
         # Função custo
         custo = 0.0
+
+        # Penalização das folgas
+        custo += peso_slack * cp.sum(slack_h)
 
         # Restrições
         restricoes = [
@@ -255,34 +264,34 @@ class ControladorMPC:
             custo += cp.quad_form(e_int[:, k + 1], self.I)
 
             # Restrições nos estados (com margem de segurança)
-            restricoes.append(x[0, k + 1] + self.x_eq[0] >= self.h_min)
-            restricoes.append(x[0, k + 1] + self.x_eq[0] <= self.h_max)
+            restricoes.append(x[0, k + 1] + self.x_eq[0] >= self.h_min - slack_h[k + 1])
+            restricoes.append(x[0, k + 1] + self.x_eq[0] <= self.h_max + slack_h[k + 1])
             restricoes.append(x[1, k + 1] + self.x_eq[1] >= self.C_min)
             restricoes.append(x[1, k + 1] + self.x_eq[1] <= self.C_max)
 
             # Restrição anti-overshoot (limita o nível máximo baseado na referência)
             if np.any(r_dev > 0):  # Se há degrau positivo
                 restricoes.append(
-                    x[0, k + 1] <= r_dev[0] * 1.02
-                )  # Max 2% de overshoot em nível
+                    x[0, k + 1] <= r_dev[0] * (1 + params.LIMITE_OVERSHOOT)
+                )  # Max de overshoot em nível
 
             # Restrição anti-undershoot (limita o nível mínimo baseado na referência) - DEGRAU NEGATIVO
             if np.any(r_dev < 0):  # Se há degrau negativo
                 restricoes.append(
-                    x[0, k + 1] >= r_dev[0] * 1.02
-                )  # Max 2% de undershoot em nível (evita cair demais)
+                    x[0, k + 1] >= r_dev[0] * (1 - params.LIMITE_UNDERSHOOT)
+                )  # Max de undershoot em nível (evita cair demais)
 
             # Restrição anti-overshoot (concentração)
             if r_dev[1] > 0:  # Se há degrau positivo na concentração
                 restricoes.append(
-                    x[1, k + 1] <= r_dev[1] * 1.02
-                )  # Max 2% de overshoot em concentração
+                    x[1, k + 1] <= r_dev[1] * (1 + params.LIMITE_OVERSHOOT)
+                )  # Max de overshoot em concentração
 
             # Restrição anti-undershoot (concentração) - DEGRAU NEGATIVO
             if r_dev[1] < 0:  # Se há degrau negativo na concentração
                 restricoes.append(
-                    x[1, k + 1] >= r_dev[1] * 1.02  # Atenção: >= e não <=
-                )  # Max 2% de undershoot em concentração (evita cair demais)
+                    x[1, k + 1] >= r_dev[1] * (1 - params.LIMITE_UNDERSHOOT)
+                )  # Max de undershoot em concentração (evita cair demais)
 
         # Restrições nos controles
         for k in range(self.Nc):
@@ -338,9 +347,78 @@ class ControladorMPC:
             else:
                 print(
                     f"[MPC-{self.nome}] AVISO: Otimização falhou ({problema.status}). "
-                    f"Mantendo controle anterior."
+                    f"Tentando estratégia de recuperação..."
                 )
-                return self.u_anterior
+
+                # Estratégia 1: Reduzir horizontes temporariamente
+                Np_reduzido = max(10, self.Np // 2)
+                Nc_reduzido = max(5, self.Nc // 2)
+                try:
+                    # Variáveis de decisão para horizontes reduzidos
+                    x_r = cp.Variable((self.nx, Np_reduzido + 1))
+                    u_r = cp.Variable((self.nu, Nc_reduzido))
+                    e_int_r = cp.Variable((self.ny, Np_reduzido + 1))
+                    slack_h_r = cp.Variable((Np_reduzido + 1,), nonneg=True)
+                    custo_r = 1e6 * cp.sum(slack_h_r)
+                    restricoes_r = [
+                        x_r[:, 0] == x_dev,
+                        e_int_r[:, 0] == self.erro_integral,
+                    ]
+                    for k in range(Np_reduzido):
+                        k_u = min(k, Nc_reduzido - 1)
+                        restricoes_r.append(
+                            x_r[:, k + 1] == self.Ad @ x_r[:, k] + self.Bd @ u_r[:, k_u]
+                        )
+                        y_pred_r = self.Cd @ x_r[:, k + 1]
+                        erro_r = y_pred_r - r_dev
+                        restricoes_r.append(e_int_r[:, k + 1] == e_int_r[:, k] + erro_r)
+                        custo_r += cp.quad_form(erro_r, self.Q)
+                        if k < Nc_reduzido:
+                            custo_r += cp.quad_form(u_r[:, k], self.R)
+                        custo_r += cp.quad_form(e_int_r[:, k + 1], self.I)
+                        restricoes_r.append(
+                            x_r[0, k + 1] + self.x_eq[0]
+                            >= self.h_min - slack_h_r[k + 1]
+                        )
+                        restricoes_r.append(
+                            x_r[0, k + 1] + self.x_eq[0]
+                            <= self.h_max + slack_h_r[k + 1]
+                        )
+                        restricoes_r.append(x_r[1, k + 1] + self.x_eq[1] >= self.C_min)
+                        restricoes_r.append(x_r[1, k + 1] + self.x_eq[1] <= self.C_max)
+                    for k in range(Nc_reduzido):
+                        restricoes_r.append(u_r[:, k] >= self.u_min - self.u_eq)
+                        restricoes_r.append(u_r[:, k] <= self.u_max - self.u_eq)
+                        if k == 0:
+                            delta_u_r = u_r[:, k] - (self.u_anterior - self.u_eq)
+                        else:
+                            delta_u_r = u_r[:, k] - u_r[:, k - 1]
+                        restricoes_r.append(delta_u_r >= -self.delta_u_max)
+                        restricoes_r.append(delta_u_r <= self.delta_u_max)
+                    problema_r = cp.Problem(cp.Minimize(custo_r), restricoes_r)
+                    problema_r.solve(solver=cp.CLARABEL, verbose=False)
+                    if problema_r.status in ["optimal", "optimal_inaccurate"]:
+                        u_otimo_dev_r = u_r[:, 0].value
+                        u_otimo_r = u_otimo_dev_r + self.u_eq
+                        self.u_anterior = u_otimo_r.copy()
+                        print(
+                            f"[MPC-{self.nome}] Recuperação com horizonte reduzido bem-sucedida."
+                        )
+                        return np.clip(u_otimo_r, self.u_min, self.u_max)
+                    else:
+                        print(
+                            f"[MPC-{self.nome}] Recuperação com horizonte reduzido falhou ({problema_r.status})."
+                        )
+                except Exception as e_r:
+                    print(f"[MPC-{self.nome}] ERRO na recuperação reduzida: {e_r}")
+
+                # Estratégia 2: Aplicar controle conservador
+                print(f"[MPC-{self.nome}] Aplicando controle conservador.")
+                fator_conservador = 0.9
+                u_conservador = self.u_anterior * fator_conservador + self.u_eq * (
+                    1 - fator_conservador
+                )
+                return np.clip(u_conservador, self.u_min, self.u_max)
 
         except Exception as e:
             print(

@@ -234,9 +234,9 @@ LIMITES_ATUADORES = {
 
 # Limites de taxa de variação (slew rate) para suavidade
 LIMITES_VARIACAO = {
-    "delta_u1_max": 1,  # variação máxima por amostra (bomba água)
-    "delta_u2_max": 1,  # variação máxima por amostra (bomba salmoura)
-    "delta_u3_max": 1,  # variação máxima por amostra (válvula)
+    "delta_u1_max": 0.2,  # variação máxima por amostra (bomba água)
+    "delta_u2_max": 0.2,  # variação máxima por amostra (bomba salmoura)
+    "delta_u3_max": 0.15,  # variação máxima por amostra (válvula)
 }
 
 
@@ -246,8 +246,8 @@ LIMITES_VARIACAO = {
 
 # Horizontes de predição e controle
 MPC_HORIZONTES = {
-    "Np": 30,  # Horizonte de predição (200s = 40 * 5s)
-    "Nc": 15,  # Horizonte de controle (100s = 20 * 5s)
+    "Np": 50,  # Horizonte de predição (200s = 40 * 5s)
+    "Nc": 20,  # Horizonte de controle (100s = 20 * 5s)
 }
 
 # Pesos da função custo (matrizes diagonais Q, R, I)
@@ -258,21 +258,27 @@ MPC_HORIZONTES = {
 MPC_PESOS = {
     # Para cada tanque de processo (C, D, E)
     "C": {
-        "Q": np.diag([300.0, 200.0]),  # [peso_h, peso_C]
-        "R": np.diag([200.0, 200.0, 500.0]),  # [peso_u1, peso_u2, peso_u3]
-        "I": np.diag([80.0, 50.0]),  # [peso_int_h, peso_int_C]
+        "Q": np.diag([250.0, 180.0]),
+        "R": np.diag([300.0, 300.0, 600.0]),
+        "I": np.diag([60.0, 40.0]),
     },
     "D": {
-        "Q": np.diag([300.0, 200.0]),
-        "R": np.diag([200.0, 200.0, 500.0]),
-        "I": np.diag([80.0, 50.0]),
+        "Q": np.diag([250.0, 180.0]),
+        "R": np.diag([300.0, 300.0, 600.0]),
+        "I": np.diag([60.0, 40.0]),
     },
     "E": {
-        "Q": np.diag([300.0, 200.0]),
-        "R": np.diag([200.0, 200.0, 500.0]),
-        "I": np.diag([80.0, 50.0]),
+        "Q": np.diag([250.0, 180.0]),
+        "R": np.diag([300.0, 300.0, 600.0]),
+        "I": np.diag([60.0, 40.0]),
     },
 }
+
+# Pergunta: como fazer o mpc ser mais potente no controle do nivel e concentracao?
+# Resposta: aumentar os pesos Q e I, principalmente em C (mais crítico)
+
+LIMITE_OVERSHOOT = 0.08  # valor final permitido no overshoot
+LIMITE_UNDERSHOOT = 0.08  # valor final permitido no undershoot
 
 # Nota: Peso maior em R[2] (u3) para suavizar ação da válvula e evitar chattering
 # Pesos Q e I podem ser ajustados durante sintonia para atender requisitos R1-R4
