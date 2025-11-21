@@ -249,6 +249,7 @@ class SimuladorMPC:
         print(f"Tempo simulado: {self.tempo_total}s ({self.tempo_total/60:.1f} min)")
         print(f"{'='*70}\n")
 
+        self.verificar_integridade_historicos()
         return self.obter_resultados()
 
     def _imprimir_status(self, tempo: float, estados: dict, referencias: dict):
@@ -287,6 +288,15 @@ class SimuladorMPC:
             "sistema": self.sistema,
             "controlador": self.controlador,
         }
+
+    def verificar_integridade_historicos(self):
+        n = self.n_passos
+        for nome, arr in self.hist_estados.items():
+            assert len(arr) == n, f"Histórico de estado {nome} desalinhado"
+        for nome, arr in self.hist_controles.items():
+            assert len(arr) == n, f"Histórico de controle {nome} desalinhado"
+        for nome, arr in self.hist_referencias.items():
+            assert len(arr) == n, f"Histórico de referência {nome} desalinhado"
 
 
 # ==============================================================================

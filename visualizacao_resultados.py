@@ -516,7 +516,12 @@ def plotar_resumo_completo(
 # ==============================================================================
 
 
-def analisar_desempenho(resultados: Dict, verbose: bool = True) -> Dict:
+def analisar_desempenho(
+    resultados: Dict,
+    verbose: bool = True,
+    salvar: bool = False,
+    nome_arquivo: str = "relatorio_desempenho.txt",
+) -> Dict:
     """
     Analisa o desempenho do sistema e verifica atendimento aos requisitos R1-R4.
 
@@ -570,6 +575,8 @@ def analisar_desempenho(resultados: Dict, verbose: bool = True) -> Dict:
 
     if verbose:
         imprimir_relatorio_desempenho(metricas)
+    if salvar:
+        salvar_relatorio_texto(metricas, nome_arquivo=nome_arquivo)
 
     return metricas
 
@@ -678,10 +685,72 @@ def imprimir_relatorio_desempenho(metricas: Dict):
     print("=" * 70 + "\n")
 
 
+def salvar_relatorio_texto(
+    metricas: Dict, nome_arquivo: str = "relatorio_desempenho.txt"
+):
+    """
+    Salva o relatório de desempenho em um arquivo de texto.
+    """
+    with open(nome_arquivo, "w") as f:
+        f.write("=" * 70 + "\n")
+        f.write("RELATÓRIO DE DESEMPENHO DO SISTEMA MPC\n")
+        f.write("=" * 70 + "\n\n")
+
+        # Métricas por tanque
+        for tanque in ["C", "D", "E"]:
+            f.write(f"--- Tanque {tanque} ---\n")
+            f.write(f"  Nível:\n")
+            f.write(
+                f"    Tempo de acomodação: {metricas[tanque]['nivel']['t_settling']:.1f}s\n"
+            )
+            f.write(f"    Overshoot: {metricas[tanque]['nivel']['overshoot']:.2f}%\n")
+            f.write(
+                f"    Erro em regime: {metricas[tanque]['nivel']['erro_regime']:.2f}%\n"
+            )
+            f.write(f"  Concentração:\n")
+            f.write(
+                f"    Tempo de acomodamento: {metricas[tanque]['concentracao']['t_settling']:.1f}s\n"
+            )
+            f.write(
+                f"    Overshoot: {metricas[tanque]['concentracao']['overshoot']:.2f}%\n"
+            )
+            f.write(
+                f"    Erro em regime: {metricas[tanque]['concentracao']['erro_regime']:.2f}%\n"
+            )
+            f.write("\n")
+
+        # Conformidade com requisitos
+        f.write("=" * 70 + "\n")
+        f.write("VERIFICAÇÃO DE REQUISITOS (R1-R4)\n")
+        f.write("=" * 70 + "\n\n")
+
+        for req in ["R1", "R2", "R3", "R4"]:
+            status = (
+                "✓ ATENDIDO"
+                if metricas["conformidade"][req]["status"]
+                else "✗ NÃO ATENDIDO"
+            )
+            criterio = params.REQUISITOS[req]["criterio"]
+            f.write(f"{req} - {params.REQUISITOS[req]['nome']}: {status}\n")
+            f.write(f"   Critério: {criterio}\n")
+            if not metricas["conformidade"][req]["status"]:
+                f.write(f"   Detalhes:\n")
+                for detalhe in metricas["conformidade"][req]["detalhes"]:
+                    f.write(f"     - {detalhe}\n")
+            f.write("\n")
+
+    print(f"Relatório salvo em: {nome_arquivo}")
+
+
 def exportar_para_csv(resultados: Dict, nome_arquivo: str = "resultados_simulacao.csv"):
     """
     Exporta os dados da simulação para arquivo CSV.
     """
+    # Garante que o diretório existe
+    diretorio = os.path.dirname(nome_arquivo)
+    if diretorio and not os.path.exists(diretorio):
+        os.makedirs(diretorio, exist_ok=True)
+
     # Cria DataFrame combinando estados, controles e referências
     df = pd.DataFrame(
         {

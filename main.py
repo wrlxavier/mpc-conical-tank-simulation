@@ -259,25 +259,47 @@ def pos_processar_resultados(resultados: dict, num_cenario: int):
         opcao = input("\nEscolha uma opção: ").strip()
 
         if opcao == "1":
-            plotar_niveis(resultados)
+            nome_arquivo = f"cenario_{num_cenario}/cenario_{num_cenario}_niveis.png"
+            plotar_niveis(resultados, nome_arquivo=nome_arquivo)
         elif opcao == "2":
-            plotar_concentracoes(resultados)
+            nome_arquivo = (
+                f"cenario_{num_cenario}/cenario_{num_cenario}_concentracoes.png"
+            )
+            plotar_concentracoes(resultados, nome_arquivo=nome_arquivo)
         elif opcao == "3":
-            plotar_controles(resultados)
+            nome_arquivo = f"cenario_{num_cenario}/cenario_{num_cenario}_controles.png"
+            plotar_controles(resultados, nome_arquivo=nome_arquivo)
         elif opcao == "4":
-            plotar_resumo_completo(resultados)
+            nome_arquivo = f"cenario_{num_cenario}/cenario_{num_cenario}_resumo.png"
+            plotar_resumo_completo(resultados, nome_arquivo=nome_arquivo)
         elif opcao == "5":
-            analisar_desempenho(resultados, verbose=True)
+            analisar_desempenho(
+                resultados,
+                verbose=True,
+                salvar=True,
+                nome_arquivo=f"cenario_{num_cenario}/cenario_{num_cenario}_relatorio_desempenho.txt",
+            )
             input("\nPressione ENTER para continuar...")
         elif opcao == "6":
-            nome_arquivo = f"cenario_{num_cenario}_resultados.csv"
+            nome_arquivo = f"cenario_{num_cenario}/cenario_{num_cenario}_resultados.csv"
             exportar_para_csv(resultados, nome_arquivo)
             input("\nPressione ENTER para continuar...")
         elif opcao == "7":
             print("\nExecutando todas as análises...\n")
-            plotar_resumo_completo(resultados)
-            analisar_desempenho(resultados, verbose=True)
-            exportar_para_csv(resultados, f"cenario_{num_cenario}_resultados.csv")
+            nome_arquivo = (
+                f"cenario_{num_cenario}/cenario_{num_cenario}_resumo_completo.png"
+            )
+            plotar_resumo_completo(resultados, nome_arquivo=nome_arquivo)
+            analisar_desempenho(
+                resultados,
+                verbose=True,
+                salvar=True,
+                nome_arquivo=f"cenario_{num_cenario}/cenario_{num_cenario}_relatorio_desempenho.txt",
+            )
+            exportar_para_csv(
+                resultados,
+                f"cenario_{num_cenario}/cenario_{num_cenario}_resultados.csv",
+            )
             input("\nPressione ENTER para continuar...")
         elif opcao == "0":
             break

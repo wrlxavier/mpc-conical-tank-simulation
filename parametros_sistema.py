@@ -234,9 +234,9 @@ LIMITES_ATUADORES = {
 
 # Limites de taxa de variação (slew rate) para suavidade
 LIMITES_VARIACAO = {
-    "delta_u1_max": 0.2,  # variação máxima por amostra (bomba água)
-    "delta_u2_max": 0.2,  # variação máxima por amostra (bomba salmoura)
-    "delta_u3_max": 0.15,  # variação máxima por amostra (válvula)
+    "delta_u1_max": 0.20,  # Era 0.9 → REDUZIR para 0.20
+    "delta_u2_max": 0.25,  # Era 0.9 → REDUZIR para 0.25 (maior para C)
+    "delta_u3_max": 0.15,  # Era 0.9 → REDUZIR para 0.15
 }
 
 
@@ -246,8 +246,8 @@ LIMITES_VARIACAO = {
 
 # Horizontes de predição e controle
 MPC_HORIZONTES = {
-    "Np": 50,  # Horizonte de predição (200s = 40 * 5s)
-    "Nc": 20,  # Horizonte de controle (100s = 20 * 5s)
+    "Np": 150,  # 600s = 1.6×τ_h, cobre bem ambas dinâmicas
+    "Nc": 50,  # 200s, permite ações mais suaves
 }
 
 # Pesos da função custo (matrizes diagonais Q, R, I)
@@ -255,27 +255,25 @@ MPC_HORIZONTES = {
 # R penaliza esforço de controle
 # I penaliza erro acumulado (termo integral para offset-free)
 
+
 MPC_PESOS = {
     # Para cada tanque de processo (C, D, E)
     "C": {
-        "Q": np.diag([250.0, 180.0]),
-        "R": np.diag([300.0, 300.0, 600.0]),
-        "I": np.diag([60.0, 40.0]),
+        "Q": np.diag([250.0, 2500]),  # Mantém ou aumenta C ligeiramente
+        "R": np.diag([200.0, 250.0, 600.0]),  # Reduz u1 e u2 para mais liberdade
+        "I": np.diag([60.0, 1000]),  # REDUZ integral de C (causa do overshoot)
     },
     "D": {
-        "Q": np.diag([250.0, 180.0]),
-        "R": np.diag([300.0, 300.0, 600.0]),
-        "I": np.diag([60.0, 40.0]),
+        "Q": np.diag([250.0, 2500]),  # Mantém ou aumenta C ligeiramente
+        "R": np.diag([200.0, 250.0, 600.0]),  # Reduz u1 e u2 para mais liberdade
+        "I": np.diag([60.0, 1000]),  # REDUZ integral de C (causa do overshoot)
     },
     "E": {
-        "Q": np.diag([250.0, 180.0]),
-        "R": np.diag([300.0, 300.0, 600.0]),
-        "I": np.diag([60.0, 40.0]),
+        "Q": np.diag([250.0, 2500]),  # Mantém ou aumenta C ligeiramente
+        "R": np.diag([200.0, 250.0, 600.0]),  # Reduz u1 e u2 para mais liberdade
+        "I": np.diag([60.0, 1000]),  # REDUZ integral de C (causa do overshoot)
     },
 }
-
-# Pergunta: como fazer o mpc ser mais potente no controle do nivel e concentracao?
-# Resposta: aumentar os pesos Q e I, principalmente em C (mais crítico)
 
 LIMITE_OVERSHOOT = 0.08  # valor final permitido no overshoot
 LIMITE_UNDERSHOOT = 0.08  # valor final permitido no undershoot
