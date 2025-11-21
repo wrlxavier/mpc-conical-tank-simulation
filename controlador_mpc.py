@@ -193,8 +193,24 @@ class ControladorMPC:
         )
 
         self.u_eq = self.u_anterior.copy()
-
+        # Adiciona atributos para filtro de referência
+        self.r_filtrada = self.x_eq.copy()  # Inicializa referência filtrada
+        self.tau_filtro = 40.0  # Constante de tempo do filtro (40s)
         print(f"[MPC-{nome_tanque}] Inicializado: Np={self.Np}, Nc={self.Nc}, Ts={Ts}s")
+
+    def filtrar_referencia(self, r_alvo):
+        """
+        Aplica filtro de primeira ordem para suavizar degraus de referência.
+
+        Args:
+            r_alvo: referência alvo (setpoint desejado)
+
+        Returns:
+            Referência filtrada (suavizada)
+        """
+        alpha = self.Ts / (self.tau_filtro + self.Ts)
+        self.r_filtrada = alpha * r_alvo + (1 - alpha) * self.r_filtrada
+        return self.r_filtrada.copy()
 
     def calcular_controle(
         self, x_medido: np.ndarray, referencia: np.ndarray
@@ -210,8 +226,9 @@ class ControladorMPC:
             Ação de controle ótima u = [u1, u2, u3]
         """
         # Trabalha com desvios em relação ao ponto de operação
+        referencia_filtrada = self.filtrar_referencia(referencia)
         x_dev = x_medido - self.x_eq
-        r_dev = referencia - self.x_eq
+        r_dev = referencia_filtrada - self.x_eq  # <-- MUDANÇA AQUI
 
         # Variáveis de decisão do CVXPY
         x = cp.Variable((self.nx, self.Np + 1))  # estados futuros
@@ -224,11 +241,21 @@ class ControladorMPC:
         )  # Folga para restrições de nível
         peso_slack = 1e6  # Penalização alta para desencorajar uso
 
+        # Adiciona variável de folga para overshoot de concentração
+        slack_overshoot = cp.Variable((self.Np + 1,), nonneg=True)
+        peso_slack_overshoot = 1e8
+
+        # Adiciona variável de folga para undershoot (melhoria 8)
+        slack_undershoot = cp.Variable((self.Np + 1,), nonneg=True)
+        peso_slack_undershoot = 1e8  # Mesmo peso sugerido
+
         # Função custo
         custo = 0.0
 
         # Penalização das folgas
         custo += peso_slack * cp.sum(slack_h)
+        custo += peso_slack_overshoot * cp.sum(slack_overshoot)
+        custo += peso_slack_undershoot * cp.sum(slack_undershoot)
 
         # Restrições
         restricoes = [
@@ -269,29 +296,38 @@ class ControladorMPC:
             restricoes.append(x[1, k + 1] + self.x_eq[1] >= self.C_min)
             restricoes.append(x[1, k + 1] + self.x_eq[1] <= self.C_max)
 
-            # Restrição anti-overshoot (limita o nível máximo baseado na referência)
+            # Restrição anti-overshoot (nível) - permanece hard
             if np.any(r_dev > 0):  # Se há degrau positivo
                 restricoes.append(
                     x[0, k + 1] <= r_dev[0] * (1 + params.LIMITE_OVERSHOOT)
                 )  # Max de overshoot em nível
 
-            # Restrição anti-undershoot (limita o nível mínimo baseado na referência) - DEGRAU NEGATIVO
+            # Restrição anti-undershoot (nível) - agora soft
             if np.any(r_dev < 0):  # Se há degrau negativo
                 restricoes.append(
-                    x[0, k + 1] >= r_dev[0] * (1 - params.LIMITE_UNDERSHOOT)
-                )  # Max de undershoot em nível (evita cair demais)
+                    x[0, k + 1]
+                    >= r_dev[0] * (1 - params.LIMITE_UNDERSHOOT)
+                    - slack_undershoot[k + 1]
+                )  # Max de undershoot em nível (soft)
 
-            # Restrição anti-overshoot (concentração)
+            # Restrição anti-overshoot (concentração) - agora soft
             if r_dev[1] > 0:  # Se há degrau positivo na concentração
                 restricoes.append(
-                    x[1, k + 1] <= r_dev[1] * (1 + params.LIMITE_OVERSHOOT)
-                )  # Max de overshoot em concentração
+                    x[1, k + 1]
+                    <= r_dev[1] * (1 + params.LIMITE_OVERSHOOT) + slack_overshoot[k + 1]
+                )  # Max de overshoot em concentração (soft)
 
-            # Restrição anti-undershoot (concentração) - DEGRAU NEGATIVO
+            # Restrição anti-undershoot (concentração) - agora soft
             if r_dev[1] < 0:  # Se há degrau negativo na concentração
                 restricoes.append(
-                    x[1, k + 1] >= r_dev[1] * (1 - params.LIMITE_UNDERSHOOT)
-                )  # Max de undershoot em concentração (evita cair demais)
+                    x[1, k + 1]
+                    >= r_dev[1] * (1 - params.LIMITE_UNDERSHOOT)
+                    - slack_undershoot[k + 1]
+                )  # Max de undershoot em concentração (soft)
+
+        # Restrição de estabilidade no estado final do horizonte
+        # Força estado final próximo ao setpoint (r_dev)
+        restricoes.append(cp.norm(x[:, self.Np] - r_dev) <= 0.05 * cp.norm(r_dev))
 
         # Restrições nos controles
         for k in range(self.Nc):

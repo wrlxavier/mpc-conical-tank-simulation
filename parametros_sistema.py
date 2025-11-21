@@ -234,9 +234,9 @@ LIMITES_ATUADORES = {
 
 # Limites de taxa de variação (slew rate) para suavidade
 LIMITES_VARIACAO = {
-    "delta_u1_max": 0.20,  # Era 0.9 → REDUZIR para 0.20
-    "delta_u2_max": 0.25,  # Era 0.9 → REDUZIR para 0.25 (maior para C)
-    "delta_u3_max": 0.15,  # Era 0.9 → REDUZIR para 0.15
+    "delta_u1_max": 0.10,  # Era 0.9 → REDUZIR para 0.20
+    "delta_u2_max": 0.10,  # Era 0.9 → REDUZIR para 0.30 (maior para C)
+    "delta_u3_max": 0.05,  # Era 0.9 → REDUZIR para 0.15
 }
 
 
@@ -246,8 +246,8 @@ LIMITES_VARIACAO = {
 
 # Horizontes de predição e controle
 MPC_HORIZONTES = {
-    "Np": 150,  # 600s = 1.6×τ_h, cobre bem ambas dinâmicas
-    "Nc": 50,  # 200s, permite ações mais suaves
+    "Np": 100,
+    "Nc": 30,
 }
 
 # Pesos da função custo (matrizes diagonais Q, R, I)
@@ -256,27 +256,34 @@ MPC_HORIZONTES = {
 # I penaliza erro acumulado (termo integral para offset-free)
 
 
-MPC_PESOS = {
-    # Para cada tanque de processo (C, D, E)
-    "C": {
-        "Q": np.diag([250.0, 2500]),  # Mantém ou aumenta C ligeiramente
-        "R": np.diag([200.0, 250.0, 600.0]),  # Reduz u1 e u2 para mais liberdade
-        "I": np.diag([60.0, 1000]),  # REDUZ integral de C (causa do overshoot)
-    },
-    "D": {
-        "Q": np.diag([250.0, 2500]),  # Mantém ou aumenta C ligeiramente
-        "R": np.diag([200.0, 250.0, 600.0]),  # Reduz u1 e u2 para mais liberdade
-        "I": np.diag([60.0, 1000]),  # REDUZ integral de C (causa do overshoot)
-    },
-    "E": {
-        "Q": np.diag([250.0, 2500]),  # Mantém ou aumenta C ligeiramente
-        "R": np.diag([200.0, 250.0, 600.0]),  # Reduz u1 e u2 para mais liberdade
-        "I": np.diag([60.0, 1000]),  # REDUZ integral de C (causa do overshoot)
-    },
+mpc_pesos_tanque_generico = {
+    # "Q": np.diag([250.0, 1200]),
+    # "R": np.diag([200.0, 200.0, 600.0]),
+    # "I": np.diag([60.0, 300]),
+    # "Q": np.diag([150.0, 1200]),
+    # "R": np.diag([400.0, 400.0, 800.0]),
+    # "I": np.diag([40.0, 200]),
+    # "Q": np.diag([180.0, 1200]),
+    # "R": np.diag([400.0, 400.0, 650.0]),
+    # "I": np.diag([50.0, 250]),
+    # Q: Reduzir peso de rastreamento (aceita convergência mais lenta)
+    "Q": np.diag([60.0, 300.0]),  # Reduzir ambos significativamente
+    # R: Aumentar penalização de controle (ações mais suaves)
+    "R": np.diag([800.0, 800.0, 1000.0]),  # Aumentar u1 e u2, reduzir u3
+    # I: Aumentar termo integral (elimina erro em regime)
+    "I": np.diag([200.0, 600.0]),  # Aumentar para precisão
 }
 
-LIMITE_OVERSHOOT = 0.08  # valor final permitido no overshoot
-LIMITE_UNDERSHOOT = 0.08  # valor final permitido no undershoot
+
+MPC_PESOS = {
+    # Para cada tanque de processo (C, D, E)
+    "C": mpc_pesos_tanque_generico,
+    "D": mpc_pesos_tanque_generico,
+    "E": mpc_pesos_tanque_generico,
+}
+
+LIMITE_OVERSHOOT = 0.005  # valor final permitido no overshoot
+LIMITE_UNDERSHOOT = 0.005  # valor final permitido no undershoot
 
 # Nota: Peso maior em R[2] (u3) para suavizar ação da válvula e evitar chattering
 # Pesos Q e I podem ser ajustados durante sintonia para atender requisitos R1-R4
