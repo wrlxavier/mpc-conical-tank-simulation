@@ -1,6 +1,4 @@
 """
-visualizacao_resultados.py
-
 Gera gráficos e análises visuais dos resultados da simulação MPC.
 
 Funções principais:
@@ -10,8 +8,6 @@ Funções principais:
 - Verificar atendimento aos requisitos R1-R4
 - Gerar relatório consolidado de desempenho
 - Exportar dados para CSV
-
-Baseado na Entrega 3 - Requisitos de Desempenho
 """
 
 import numpy as np
@@ -22,9 +18,8 @@ import parametros_sistema as params
 import os
 
 
-# ==============================================================================
 # CONFIGURAÇÕES DE VISUALIZAÇÃO
-# ==============================================================================
+
 
 # Estilo dos gráficos
 plt.style.use("seaborn-v0_8-darkgrid")
@@ -40,9 +35,7 @@ GRAFICOS_DIR = os.path.join(os.path.dirname(__file__), "graficos")
 os.makedirs(GRAFICOS_DIR, exist_ok=True)
 
 
-# ==============================================================================
 # CÁLCULO DE MÉTRICAS DE DESEMPENHO
-# ==============================================================================
 
 
 def calcular_tempo_acomodacao(
@@ -85,7 +78,7 @@ def calcular_tempo_acomodacao(
     # Procura o último ponto que saiu da banda
     dentro_da_banda = (sinal >= banda_inferior) & (sinal <= banda_superior)
 
-    # Identifica quando entra definitivamente na banda (não sai mais)
+    # Identifica quando entra definitivamente na banda
     for i in range(len(sinal) - 1, idx_inicio, -1):
         if not dentro_da_banda[i]:
             # Encontrou o último ponto fora da banda
@@ -134,7 +127,7 @@ def calcular_overshoot(
     if variacao_ref > 0:
         pico = np.max(sinal[t_inicio_degrau_idx:])
         overshoot = ((pico - ref_final) / variacao_ref) * 100.0
-    # Overshoot para degrau negativo (undershoot)
+    # Overshoot para degrau negativo
     else:
         vale = np.min(sinal[t_inicio_degrau_idx:])
         overshoot = ((ref_final - vale) / abs(variacao_ref)) * 100.0
@@ -215,9 +208,7 @@ def verificar_violacao_restricoes(hist_estados: Dict, hist_controles: Dict) -> D
     return violacoes
 
 
-# ==============================================================================
 # FUNÇÕES DE PLOTAGEM
-# ==============================================================================
 
 
 def plotar_niveis(resultados: Dict, salvar: bool = True, nome_arquivo: str = None):
@@ -511,9 +502,7 @@ def plotar_resumo_completo(
     plt.close(fig)
 
 
-# ==============================================================================
 # ANÁLISE DE DESEMPENHO E RELATÓRIO
-# ==============================================================================
 
 
 def analisar_desempenho(
@@ -763,13 +752,3 @@ def exportar_para_csv(resultados: Dict, nome_arquivo: str = "resultados_simulaca
 
     df.to_csv(nome_arquivo, index=False)
     print(f"Dados exportados para: {nome_arquivo}")
-
-
-# ==============================================================================
-# TESTE
-# ==============================================================================
-
-if __name__ == "__main__":
-    print("=" * 70)
-    print("MÓDULO DE VISUALIZAÇÃO - Execute simulacao_principal.py primeiro")
-    print("=" * 70)

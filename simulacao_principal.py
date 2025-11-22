@@ -1,6 +1,4 @@
 """
-simulacao_principal.py
-
 Orquestra a simulação completa do sistema de 5 tanques com controle MPC.
 
 Este arquivo integra:
@@ -14,8 +12,6 @@ A simulação é do tipo OFFLINE/PROGRAMADA:
 - Aplica degraus em setpoints em instantes específicos
 - Gera histórico completo de estados e controles
 - Não opera em tempo real
-
-Baseado na arquitetura do semestre 2025/1 e Entrega 3
 """
 
 import numpy as np
@@ -54,7 +50,7 @@ class SimuladorMPC:
             tempo_total: duração total da simulação (s)
             dt_integracao: passo de integração do modelo (s)
             Ts_controlador: período de amostragem do MPC (s)
-            numero_cenario: cenário de teste a executar (1-6)
+            numero_cenario: cenário de teste a executar (1-3)
         """
         self.controles_atuais = {}
         self.tempo_total = tempo_total
@@ -330,86 +326,3 @@ def executar_simulacao(
     resultados = simulador.executar(verbose=verbose, usar_barra_progresso=True)
 
     return resultados
-
-
-# ==============================================================================
-# FUNÇÃO AUXILIAR: EXECUÇÃO DE MÚLTIPLOS CENÁRIOS
-# ==============================================================================
-
-
-def executar_todos_cenarios(
-    tempo_total: float = None, verbose: bool = False
-) -> Dict[int, Dict]:
-    """
-    Executa todos os 6 cenários de teste sequencialmente.
-
-    Args:
-        tempo_total: duração de cada simulação (s)
-        verbose: se True, imprime detalhes durante execução
-
-    Returns:
-        Dicionário {numero_cenario: resultados}
-    """
-    if tempo_total is None:
-        tempo_total = params.TEMPO_TOTAL
-
-    resultados_todos = {}
-
-    print("\n" + "=" * 70)
-    print("EXECUTANDO TODOS OS CENÁRIOS DE TESTE")
-    print("=" * 70)
-
-    for i in range(1, 7):
-        print(f"\n>>> CENÁRIO {i}/6 <<<")
-        resultados_todos[i] = executar_simulacao(i, tempo_total, verbose=verbose)
-        print(f">>> CENÁRIO {i}/6 CONCLUÍDO <<<\n")
-
-    print("=" * 70)
-    print("TODOS OS CENÁRIOS FORAM EXECUTADOS COM SUCESSO")
-    print("=" * 70)
-
-    return resultados_todos
-
-
-# ==============================================================================
-# TESTE BÁSICO
-# ==============================================================================
-
-if __name__ == "__main__":
-    print("\n" + "=" * 70)
-    print("TESTE DO MÓDULO DE SIMULAÇÃO")
-    print("=" * 70)
-
-    # Lista cenários disponíveis
-    cenarios_teste.listar_cenarios()
-
-    # Executa cenário 1 como exemplo
-    print("\n>>> Executando Cenário 1 (teste rápido com 500s) <<<\n")
-
-    resultados = executar_simulacao(
-        numero_cenario=1, tempo_total=500.0, verbose=True  # Simulação curta para teste
-    )
-
-    # Exibe resumo dos resultados
-    print("\n" + "=" * 70)
-    print("RESUMO DOS RESULTADOS")
-    print("=" * 70)
-
-    estados_finais = {
-        chave: valores[-1]
-        for chave, valores in resultados["estados"].items()
-        if chave != "tempo"
-    }
-
-    print("\nEstados finais:")
-    for chave, valor in estados_finais.items():
-        print(f"  {chave}: {valor:.3f}")
-
-    print("\nReferências finais:")
-    for chave in ["hC_ref", "CC_ref", "hD_ref", "CD_ref", "hE_ref", "CE_ref"]:
-        ref_final = resultados["referencias"][chave][-1]
-        print(f"  {chave}: {ref_final:.3f}")
-
-    print("\n" + "=" * 70)
-    print("TESTE CONCLUÍDO - Use visualizacao_resultados.py para gráficos")
-    print("=" * 70 + "\n")

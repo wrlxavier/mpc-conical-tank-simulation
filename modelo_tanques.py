@@ -1,14 +1,10 @@
 """
-modelo_tanques.py
-
 Implementa o modelo fenomenológico não-linear dos tanques do sistema:
 - 2 reservatórios cilíndricos (A e B) para utilidades
 - 3 tanques tronco-cônicos (C, D, E) de processo
 
 Cada tanque possui métodos para calcular suas propriedades geométricas,
-derivadas temporais e atualização de estados via Runge-Kutta de 4ª ordem.
-
-Baseado nas equações da Entrega 3 - Modelagem Matemática da Planta de Mistura
+derivadas temporais e atualização de estados via Runge-Kutta de 4 ordem.
 """
 
 import numpy as np
@@ -16,9 +12,7 @@ from typing import Tuple
 import parametros_sistema as params
 
 
-# ==============================================================================
 # CLASSE BASE: TANQUE CILÍNDRICO
-# ==============================================================================
 
 
 class TanqueCilindrico:
@@ -56,7 +50,7 @@ class TanqueCilindrico:
         self.nivel = nivel_inicial
         self.concentracao = concentracao  # Fixo para B, zero para A
 
-        # Vazões (atualizadas externamente)
+        # Vazões
         self.vazao_entrada = 0.0  # m³/s
         self.vazao_saida = 0.0  # m³/s
 
@@ -76,7 +70,7 @@ class TanqueCilindrico:
 
     def atualizar(self, dt: float) -> Tuple[float, float]:
         """
-        Atualiza o estado do tanque usando Runge-Kutta de 4ª ordem.
+        Atualiza o estado do tanque usando Runge-Kutta de 4 ordem.
 
         Args:
             dt: passo de tempo (s)
@@ -115,27 +109,12 @@ class TanqueCilindrico:
         return f"TanqueCilindrico({self.nome}): h={self.nivel:.3f}m, V={self.get_volume():.3f}m³"
 
 
-# ==============================================================================
 # CLASSE: TANQUE TRONCO-CÔNICO
-# ==============================================================================
 
 
 class TanqueTroncoConico:
     """
     Modelo de um tanque tronco-cônico para os tanques de processo (C, D, E).
-
-    Equações dinâmicas (balanços de massa):
-
-    Nível:
-        dh/dt = (Q_agua + Q_salmoura - Q_saida) / A(h)
-
-    Concentração:
-        dC/dt = (1/V(h)) * [Q_salmoura*(C_B - C) - (Q_agua + Q_salmoura)*C]
-
-    onde:
-        A(h) = π * r(h)² com r(h) = r_inferior + (dr/dh)*h
-        V(h) = (π*h/3) * (R0² + R0*R(h) + R(h)²)
-        Q_saida = k_v * u3 * sqrt(h)  (Torricelli)
     """
 
     def __init__(
@@ -201,16 +180,12 @@ class TanqueTroncoConico:
     def calcular_raio(self, h: float) -> float:
         """
         Calcula o raio da seção transversal na altura h.
-
-        r(h) = r_inferior + (dr/dh) * h
         """
         return self.raio_inferior + self.dr_dh * h
 
     def calcular_area(self, h: float) -> float:
         """
         Calcula a área da seção transversal na altura h.
-
-        A(h) = π * r(h)²
         """
         r_h = self.calcular_raio(h)
         return np.pi * r_h**2
@@ -218,10 +193,6 @@ class TanqueTroncoConico:
     def calcular_volume(self, h: float) -> float:
         """
         Calcula o volume de líquido até a altura h.
-
-        V(h) = (π*h/3) * (R0² + R0*R(h) + R(h)²)
-
-        onde R0 = raio_inferior e R(h) = raio na altura h.
         """
         r_h = self.calcular_raio(h)
         return (np.pi * h / 3.0) * (
@@ -245,8 +216,6 @@ class TanqueTroncoConico:
         """
         Calcula dh/dt (balanço de massa total).
 
-        dh/dt = (Q_agua + Q_salmoura - Q_saida) / A(h)
-
         Returns:
             Taxa de variação do nível (m/s)
         """
@@ -262,21 +231,15 @@ class TanqueTroncoConico:
         """
         Calcula dC/dt (balanço de massa de espécie).
 
-        dC/dt = (1/V(h)) * [Q_salmoura*(CB - C) - (Q_agua + Q_salmoura)*C]
-
-        Forma simplificada:
-        dC/dt = (1/V(h)) * [Q_salmoura*CB - (Q_agua + Q_salmoura)*C]
-
         Returns:
             Taxa de variação da concentração (kg/(m³·s))
         """
         Q_agua, Q_salmoura, Q_saida = self.calcular_vazoes()
         V_h = self.calcular_volume(self.nivel)
 
-        if V_h < 1e-9:  # Evita divisão por zero
+        if V_h < 1e-9:
             return 0.0
 
-        # Termo de entrada de sal menos termo de saída de sal
         termo_entrada_sal = Q_salmoura * self.CB
         termo_saida_sal = self.concentracao * (Q_agua + Q_salmoura)
 
@@ -284,7 +247,7 @@ class TanqueTroncoConico:
 
     def atualizar(self, dt: float) -> Tuple[float, float]:
         """
-        Atualiza os estados do tanque usando Runge-Kutta de 4ª ordem (RK4).
+        Atualiza os estados do tanque usando Runge-Kutta de 4 ordem (RK4).
 
         Args:
             dt: passo de tempo (s)
@@ -311,8 +274,8 @@ class TanqueTroncoConico:
         # Atualização final do nível
         novo_nivel = h0 + (k1_h + 2 * k2_h + 2 * k3_h + k4_h) * dt / 6.0
 
-        # ===== RK4 para concentração =====
-        self.nivel = h0  # Restaura para calcular derivadas de C
+        # RK4 para concentração
+        self.nivel = h0
         self.concentracao = C0
 
         k1_C = self.derivada_concentracao()
@@ -329,10 +292,8 @@ class TanqueTroncoConico:
         self.concentracao = C0 + k3_C * dt
         k4_C = self.derivada_concentracao()
 
-        # Atualização final da concentração
         nova_concentracao = C0 + (k1_C + 2 * k2_C + 2 * k3_C + k4_C) * dt / 6.0
 
-        # Aplica atualizações com saturação
         self.nivel = np.clip(novo_nivel, 0.0, self.altura_max)
         self.concentracao = np.clip(nova_concentracao, 0.0, self.CB)
 
@@ -347,9 +308,7 @@ class TanqueTroncoConico:
         )
 
 
-# ==============================================================================
 # CLASSE: SISTEMA COMPLETO (5 TANQUES)
-# ==============================================================================
 
 
 class SistemaCompleto:
@@ -521,44 +480,3 @@ class SistemaCompleto:
             f"  {self.tanque_E}\n"
             f"{'='*70}"
         )
-
-
-# ==============================================================================
-# TESTES
-# ==============================================================================
-
-if __name__ == "__main__":
-    print("=" * 70)
-    print("TESTE DO MODELO DE TANQUES")
-    print("=" * 70)
-
-    # Cria sistema
-    sistema = SistemaCompleto()
-    print("\nEstado inicial:")
-    print(sistema)
-
-    # Simula 100 segundos com controles no ponto de operação
-    dt = params.DT_INTEGRACAO
-    tempo_total = 100.0
-    n_passos = int(tempo_total / dt)
-
-    controles_eq = {
-        "uA": params.CONDICOES_INICIAIS["uA_0"],
-        "uB": params.CONDICOES_INICIAIS["uB_0"],
-        "uC1": params.CONDICOES_INICIAIS["uC1_0"],
-        "uC2": params.CONDICOES_INICIAIS["uC2_0"],
-        "uC3": params.CONDICOES_INICIAIS["uC3_0"],
-        "uD1": params.CONDICOES_INICIAIS["uD1_0"],
-        "uD2": params.CONDICOES_INICIAIS["uD2_0"],
-        "uD3": params.CONDICOES_INICIAIS["uD3_0"],
-        "uE1": params.CONDICOES_INICIAIS["uE1_0"],
-        "uE2": params.CONDICOES_INICIAIS["uE2_0"],
-        "uE3": params.CONDICOES_INICIAIS["uE3_0"],
-    }
-
-    print(f"\nSimulando {tempo_total}s com controles em equilíbrio...")
-    for _ in range(n_passos):
-        sistema.atualizar_sistema(dt, controles_eq)
-
-    print("\nEstado final (deve permanecer próximo ao inicial em equilíbrio):")
-    print(sistema)

@@ -1,6 +1,4 @@
 """
-controlador_mpc.py
-
 Implementa o controlador MPC (Model Predictive Control) para os tanques de processo
 C, D e E, baseado em modelo linearizado em espaço de estados com discretização ZOH.
 
@@ -9,20 +7,16 @@ Características principais:
 - Função custo quadrática com pesos Q, R e termo integral I (offset-free)
 - Restrições em estados (níveis, concentrações) e controles (bombas, válvulas)
 - Otimização convexa via CVXPY
-
-Baseado na Entrega 3 e no trabalho do semestre 2025/1
 """
 
 import numpy as np
 import cvxpy as cp
 from scipy.signal import cont2discrete
-from typing import Tuple, Dict
+from typing import Tuple
 import parametros_sistema as params
 
 
-# ==============================================================================
 # DISCRETIZAÇÃO DO MODELO LINEAR
-# ==============================================================================
 
 
 def discretizar_modelo(
@@ -72,14 +66,14 @@ def extrair_modelo_tanque(nome_tanque: str, Ts: float) -> Tuple[np.ndarray, ...]
     Returns:
         Tupla (Ad, Bd, Cd, Dd, idx_estados, idx_controles)
     """
-    # Mapeamento dos índices de estados no modelo global (8 estados)
+    # Mapeamento dos índices de estados no modelo global, 8 estados
     indices_estados = {
         "C": [2, 3],  # hC, CC
         "D": [4, 5],  # hD, CD
         "E": [6, 7],  # hE, CE
     }
 
-    # Mapeamento dos índices de controles no modelo global (11 entradas)
+    # Mapeamento dos índices de controles no modelo global, 11 entradas
     indices_controles = {
         "C": [2, 3, 4],  # uC1, uC2, uC3
         "D": [5, 6, 7],  # uD1, uD2, uD3
@@ -92,7 +86,7 @@ def extrair_modelo_tanque(nome_tanque: str, Ts: float) -> Tuple[np.ndarray, ...]
     # Extrai submatrizes do modelo global
     A_tanque = params.A_CONTINUA[np.ix_(idx_estados, idx_estados)]
     B_tanque = params.B_CONTINUA[np.ix_(idx_estados, idx_controles)]
-    C_tanque = np.eye(2)  # Todos os estados são medidos
+    C_tanque = np.eye(2)
     D_tanque = np.zeros((2, 3))
 
     # Discretiza
@@ -101,9 +95,7 @@ def extrair_modelo_tanque(nome_tanque: str, Ts: float) -> Tuple[np.ndarray, ...]
     return Ad, Bd, Cd, Dd, idx_estados, idx_controles
 
 
-# ==============================================================================
 # CLASSE: CONTROLADOR MPC POR TANQUE
-# ==============================================================================
 
 
 class ControladorMPC:
@@ -225,17 +217,17 @@ class ControladorMPC:
         Returns:
             Ação de controle ótima u = [u1, u2, u3]
         """
-        # Trabalha com desvios em relação ao ponto de operação
+        # filtro na referência
         referencia_filtrada = self.filtrar_referencia(referencia)
         x_dev = x_medido - self.x_eq
-        r_dev = referencia_filtrada - self.x_eq  # <-- MUDANÇA AQUI
+        r_dev = referencia_filtrada - self.x_eq
 
-        # Variáveis de decisão do CVXPY
-        x = cp.Variable((self.nx, self.Np + 1))  # estados futuros
-        u = cp.Variable((self.nu, self.Nc))  # controles futuros
-        e_int = cp.Variable((self.ny, self.Np + 1))  # erros integrais
+        # Variáveis
+        x = cp.Variable((self.nx, self.Np + 1))
+        u = cp.Variable((self.nu, self.Nc))
+        e_int = cp.Variable((self.ny, self.Np + 1))
 
-        # Adiciona variáveis de folga para restrições de nível
+        # Tivemos que adicionar variáveis de folga para restrições soft
         slack_h = cp.Variable(
             (self.Np + 1,), nonneg=True
         )  # Folga para restrições de nível
@@ -243,16 +235,16 @@ class ControladorMPC:
 
         # Adiciona variável de folga para overshoot de concentração
         slack_overshoot = cp.Variable((self.Np + 1,), nonneg=True)
-        peso_slack_overshoot = 1e8
+        peso_slack_overshoot = 1e7
 
-        # Adiciona variável de folga para undershoot (melhoria 8)
+        # Adiciona variável de folga para undershoot
         slack_undershoot = cp.Variable((self.Np + 1,), nonneg=True)
-        peso_slack_undershoot = 1e8  # Mesmo peso sugerido
+        peso_slack_undershoot = 1e7
 
-        # Função custo
+        # Aqui começa a função custo
         custo = 0.0
 
-        # Penalização das folgas
+        # Adiciona termos de penalização das folgas
         custo += peso_slack * cp.sum(slack_h)
         custo += peso_slack_overshoot * cp.sum(slack_overshoot)
         custo += peso_slack_undershoot * cp.sum(slack_undershoot)
@@ -263,9 +255,9 @@ class ControladorMPC:
             e_int[:, 0] == self.erro_integral,  # integral inicial
         ]
 
-        # Horizonte de predição
+        # Parte relacionada ao horizonte de predição
         for k in range(self.Np):
-            # Índice de controle (após Nc, mantém u constante)
+            # Índice de controle
             k_u = min(k, self.Nc - 1)
 
             # Predição de estado
@@ -283,21 +275,21 @@ class ControladorMPC:
             # Custo de rastreamento
             custo += cp.quad_form(erro, self.Q)
 
-            # Custo de esforço de controle (apenas dentro do horizonte Nc)
+            # Custo de esforço de controle
             if k < self.Nc:
                 custo += cp.quad_form(u[:, k], self.R)
 
             # Custo do termo integral (offset-free)
             custo += cp.quad_form(e_int[:, k + 1], self.I)
 
-            # Restrições nos estados (com margem de segurança)
+            # Restrições nos estados com margem de segurança
             restricoes.append(x[0, k + 1] + self.x_eq[0] >= self.h_min - slack_h[k + 1])
             restricoes.append(x[0, k + 1] + self.x_eq[0] <= self.h_max + slack_h[k + 1])
             restricoes.append(x[1, k + 1] + self.x_eq[1] >= self.C_min)
             restricoes.append(x[1, k + 1] + self.x_eq[1] <= self.C_max)
 
             # Restrição anti-overshoot (nível) - permanece hard
-            if np.any(r_dev > 0):  # Se há degrau positivo
+            if np.any(r_dev > 0):
                 restricoes.append(
                     x[0, k + 1] <= r_dev[0] * (1 + params.LIMITE_OVERSHOOT)
                 )  # Max de overshoot em nível
@@ -308,25 +300,25 @@ class ControladorMPC:
                     x[0, k + 1]
                     >= r_dev[0] * (1 - params.LIMITE_UNDERSHOOT)
                     - slack_undershoot[k + 1]
-                )  # Max de undershoot em nível (soft)
+                )  # Max de undershoot em nível oft
 
-            # Restrição anti-overshoot (concentração) - agora soft
-            if r_dev[1] > 0:  # Se há degrau positivo na concentração
+            # Restrição anti-overshoot
+            if r_dev[1] > 0:
                 restricoes.append(
                     x[1, k + 1]
                     <= r_dev[1] * (1 + params.LIMITE_OVERSHOOT) + slack_overshoot[k + 1]
-                )  # Max de overshoot em concentração (soft)
+                )  # Max de overshoot em concentração soft
 
-            # Restrição anti-undershoot (concentração) - agora soft
+            # Restrição anti-undershoot
             if r_dev[1] < 0:  # Se há degrau negativo na concentração
                 restricoes.append(
                     x[1, k + 1]
                     >= r_dev[1] * (1 - params.LIMITE_UNDERSHOOT)
                     - slack_undershoot[k + 1]
-                )  # Max de undershoot em concentração (soft)
+                )  # Max de undershoot em concentração soft
 
         # Restrição de estabilidade no estado final do horizonte
-        # Força estado final próximo ao setpoint (r_dev)
+        # Força estado final próximo ao setpoint
         restricoes.append(cp.norm(x[:, self.Np] - r_dev) <= 0.05 * cp.norm(r_dev))
 
         # Restrições nos controles
@@ -360,13 +352,16 @@ class ControladorMPC:
             #     polish=True,  # Refinamento da solução
             # )
 
+            # A solução acima estava apresentando problemas de convergência.
+            # Optamos pelo CLARABEL, que é mais robusto para esse tipo de problema
+
             problema.solve(
                 solver=cp.CLARABEL,
                 verbose=False,
             )
 
             if problema.status in ["optimal", "optimal_inaccurate"]:
-                # Extrai primeiro controle da sequência ótima (horizonte deslizante)
+                # Extrai primeiro controle da sequência ótima, horizonte deslizante
                 u_otimo_dev = u[:, 0].value
                 u_otimo = u_otimo_dev + self.u_eq
 
@@ -468,9 +463,7 @@ class ControladorMPC:
         print(f"[MPC-{self.nome}] Integrador resetado.")
 
 
-# ==============================================================================
-# CONTROLADORES AUXILIARES (TANQUES A E B)
-# ==============================================================================
+# CONTROLADORES AUXILIARES PARA OS TANQUES A E B
 
 
 class ControladorPID:
@@ -517,7 +510,7 @@ class ControladorPID:
         # Termo proporcional
         P = self.Kp * erro
 
-        # Termo integral (com anti-windup simples)
+        # Termo integral com anti-windup simples
         self.erro_integral += erro * Ts
         self.erro_integral = np.clip(self.erro_integral, -10.0, 10.0)
         I = self.Ki * self.erro_integral
@@ -533,9 +526,7 @@ class ControladorPID:
         self.erro_integral = 0.0
 
 
-# ==============================================================================
 # SISTEMA DE CONTROLE COMPLETO
-# ==============================================================================
 
 
 class SistemaControle:
@@ -552,12 +543,10 @@ class SistemaControle:
         """
         self.Ts = Ts
 
-        # Controladores MPC
         self.mpc_C = ControladorMPC("C", Ts)
         self.mpc_D = ControladorMPC("D", Ts)
         self.mpc_E = ControladorMPC("E", Ts)
 
-        # Controladores PID
         self.pid_A = ControladorPID("A", Kp=15.0, Ki=0.25)
         self.pid_B = ControladorPID("B", Kp=15.0, Ki=0.25)
 
@@ -579,7 +568,7 @@ class SistemaControle:
             Dicionário com ações de controle
                 {'uA', 'uB', 'uC1', 'uC2', 'uC3', 'uD1', 'uD2', 'uD3', 'uE1', 'uE2', 'uE3'}
         """
-        # Controle dos reservatórios (mantém níveis constantes)
+        # Controle dos reservatórios
         uA = self.pid_A.calcular_controle(estados["hA"], self.Ts)
         uB = self.pid_B.calcular_controle(estados["hB"], self.Ts)
 
@@ -609,35 +598,3 @@ class SistemaControle:
             "uE2": u_E[1],
             "uE3": u_E[2],
         }
-
-
-# ==============================================================================
-# TESTES
-# ==============================================================================
-
-if __name__ == "__main__":
-    print("=" * 70)
-    print("TESTE DO CONTROLADOR MPC")
-    print("=" * 70)
-
-    # Cria controlador MPC para tanque C
-    Ts = params.TS_CONTROLADOR
-    mpc = ControladorMPC("C", Ts)
-
-    # Estado inicial (no ponto de operação)
-    x_atual = np.array([params.PONTO_OPERACAO["h_eq"], params.PONTO_OPERACAO["C_eq"]])
-
-    # Referência (pequeno degrau)
-    ref = np.array([1.7, 200.0])  # +0.2m em nível, +20kg/m³ em concentração
-
-    print(f"\nEstado inicial: h={x_atual[0]:.2f}m, C={x_atual[1]:.1f}kg/m³")
-    print(f"Referência: h={ref[0]:.2f}m, C={ref[1]:.1f}kg/m³")
-
-    # Calcula ação de controle
-    u_otimo = mpc.calcular_controle(x_atual, ref)
-
-    print(f"\nAção de controle ótima:")
-    print(f"  u1 (bomba água): {u_otimo[0]:.4f}")
-    print(f"  u2 (bomba salmoura): {u_otimo[1]:.4f}")
-    print(f"  u3 (válvula descarga): {u_otimo[2]:.4f}")
-    print("\n" + "=" * 70)

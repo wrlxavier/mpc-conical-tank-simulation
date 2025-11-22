@@ -1,6 +1,4 @@
 """
-cenarios_teste.py
-
 Define cenários de teste programados para validação do sistema de controle MPC.
 
 Cada cenário especifica:
@@ -13,8 +11,6 @@ Os cenários são projetados para verificar os requisitos R1-R4:
 - R2: Erro em regime permanente (< 5%)
 - R3: Overshoot (< 10%)
 - R4: Respeito às restrições físicas
-
-Baseado na Entrega 3 - Proposta da Estrutura de Controle
 """
 
 import numpy as np
@@ -22,9 +18,7 @@ from typing import Dict, List, Tuple
 import parametros_sistema as params
 
 
-# ==============================================================================
 # FUNÇÕES AUXILIARES PARA GERAÇÃO DE PERFIS
-# ==============================================================================
 
 
 def gerar_degrau(
@@ -116,45 +110,65 @@ def gerar_multiplos_degraus(
     return perfil
 
 
-# ==============================================================================
-# DEFINIÇÃO DOS CENÁRIOS DE TESTE
-# ==============================================================================
-
-
-def cenario_1_degrau_nivel_unico(
-    tempo_total: float = 3000.0, dt: float = 0.5
-) -> Dict[str, np.ndarray]:
+def gerar_senoidal(
+    tempo_total: float,
+    dt: float,
+    frequencia: float,
+    amplitude: float,
+    fase: float = 0.0,
+) -> np.ndarray:
     """
-    Cenário 1: Degrau único no setpoint de nível do Tanque C
+    Gera um perfil senoidal.
 
-    Objetivo: Verificar R1 (velocidade), R2 (erro permanente) e R3 (overshoot)
-    para variação isolada de nível.
+    Args:
+        tempo_total: duração total da simulação (s)
+        dt: passo de tempo (s)
+        frequencia: frequência da onda senoidal (Hz)
+        amplitude: amplitude da onda senoidal
+        fase: fase da onda senoidal (radianos)
 
+    Returns:
+        Array com perfil de referência ao longo do tempo
+    """
+    t = np.arange(0, tempo_total + dt, dt)
+    return amplitude * np.sin(2 * np.pi * frequencia * t + fase)
+
+
+# DEFINIÇÃO DOS CENÁRIOS DE TESTE
+
+
+def cenario_1(tempo_total: float = 3000.0, dt: float = 0.5) -> Dict[str, np.ndarray]:
+    """
+    Cenário 1: Degrau único no setpoint de nível do Tanque C (+0.2m), concentração do Tanque D (+20kg/m³) e nível do Tanque E (-0.2m)
+    Objetivo: Verificar R1, R2, R3 para variação isolada de nível e concentração.
     Args:
         tempo_total: duração da simulação (s)
         dt: passo de integração (s)
-
     Returns:
-        Dicionário com perfis de referência para todos os tanques
+        Dicionário com perfis de referência
     """
-    # Ponto de operação nominal
+
     h_eq = params.PONTO_OPERACAO["h_eq"]
     C_eq = params.PONTO_OPERACAO["C_eq"]
 
-    # Degrau de +0.2m no nível do tanque C em t=30s
-    hC_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=30.0,
-        valor_inicial=h_eq,
-        valor_final=min(h_eq + 0.2, 1.7),
-    )
+    # Degrau em hC: +0.2m a partir de t=30s, sem retorno ao equilíbrio
+    instantes_hC = [30.0]
+    valores_hC = [h_eq, h_eq + 0.2]
+    hC_ref = gerar_multiplos_degraus(tempo_total, dt, instantes_hC, valores_hC)
 
-    # Mantém concentração e demais tanques em equilíbrio
+    # Degrau em CD: +20kg/m³ a partir de t=30s, sem retorno ao equilíbrio
+    instantes_CD = [30.0]
+    valores_CD = [C_eq, C_eq + 20.0]
+    CD_ref = gerar_multiplos_degraus(tempo_total, dt, instantes_CD, valores_CD)
+
+    # Degrau em hE: -0.2m a partir de t=30s, sem retorno ao equilíbrio
+    instantes_hE = [30.0]
+    valores_hE = [h_eq, h_eq - 0.2]
+    hE_ref = gerar_multiplos_degraus(tempo_total, dt, instantes_hE, valores_hE)
+
+    # Demais variáveis constantes no ponto de equilíbrio
     CC_ref = np.ones_like(hC_ref) * C_eq
     hD_ref = np.ones_like(hC_ref) * h_eq
-    CD_ref = np.ones_like(hC_ref) * C_eq
-    hE_ref = np.ones_like(hC_ref) * h_eq
     CE_ref = np.ones_like(hC_ref) * C_eq
 
     return {
@@ -164,19 +178,16 @@ def cenario_1_degrau_nivel_unico(
         "CD_ref": CD_ref,
         "hE_ref": hE_ref,
         "CE_ref": CE_ref,
-        "nome": "Cenário 1: Degrau Único em Nível (Tanque C)",
-        "descricao": "Degrau de +0.2m em hC em t=30s. Verifica R1, R2, R3 para nível.",
+        "nome": "Cenário 1: Degraus em hC (+0.2m), CD (+20kg/m³), hE (-0.2m)",
+        "descricao": "Degraus em hC (+0.2m), CD (+20kg/m³) e hE (-0.2m) em t=30s. Demais variáveis mantidas no ponto de equilíbrio.",
     }
 
 
-def cenario_2_degrau_concentracao_unico(
-    tempo_total: float = 3000.0, dt: float = 0.5
-) -> Dict[str, np.ndarray]:
+def cenario_2(tempo_total: float = 3000.0, dt: float = 0.5) -> Dict[str, np.ndarray]:
     """
-    Cenário 2: Degrau único no setpoint de concentração do Tanque D
+    Cenário 2: Senoidal no Nível do Tanque C e Concentração do Tanque D
 
-    Objetivo: Verificar R1, R2, R3 para variação isolada de concentração,
-    aproveitando a dinâmica mais rápida (τ_C = 370s vs τ_h = 961s).
+    Objetivo: Verificar R1, R2, R3 para variação isolada de nível e concentração.
 
     Args:
         tempo_total: duração da simulação (s)
@@ -185,24 +196,43 @@ def cenario_2_degrau_concentracao_unico(
     Returns:
         Dicionário com perfis de referência
     """
+
     h_eq = params.PONTO_OPERACAO["h_eq"]
     C_eq = params.PONTO_OPERACAO["C_eq"]
 
-    # Degrau de +20 kg/m³ na concentração do tanque D em t=30s
-    CD_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=30.0,
-        valor_inicial=C_eq,
-        valor_final=min(C_eq + 20.0, 200.0),
+    frequencia = 1 / 360.0  # Período de 6 minutos (360s)
+
+    senoide_hC = gerar_senoidal(
+        tempo_total=tempo_total,
+        dt=dt,
+        frequencia=frequencia,
+        amplitude=0.2,
+        fase=0.0,
     )
 
-    # Mantém demais variáveis em equilíbrio
-    hC_ref = np.ones_like(CD_ref) * h_eq
-    CC_ref = np.ones_like(CD_ref) * C_eq
-    hD_ref = np.ones_like(CD_ref) * h_eq
-    hE_ref = np.ones_like(CD_ref) * h_eq
-    CE_ref = np.ones_like(CD_ref) * C_eq
+    senoide_cD = gerar_senoidal(
+        tempo_total=tempo_total,
+        dt=dt,
+        frequencia=frequencia,
+        amplitude=20.0,
+        fase=0.0,
+    )
+
+    rampa_hE = gerar_rampa(
+        tempo_total=tempo_total,
+        dt=dt,
+        valor_inicial=h_eq,
+        valor_final=h_eq + 0.2,
+        t_inicio=30.0,
+        t_fim=400.0,
+    )
+
+    hC_ref = h_eq + senoide_hC
+    CC_ref = np.ones_like(hC_ref) * C_eq
+    hD_ref = np.ones_like(hC_ref) * h_eq
+    CD_ref = C_eq + senoide_cD
+    hE_ref = rampa_hE
+    CE_ref = np.ones_like(hC_ref) * C_eq
 
     return {
         "hC_ref": hC_ref,
@@ -211,19 +241,16 @@ def cenario_2_degrau_concentracao_unico(
         "CD_ref": CD_ref,
         "hE_ref": hE_ref,
         "CE_ref": CE_ref,
-        "nome": "Cenário 2: Degrau Único em Concentração (Tanque D)",
-        "descricao": "Degrau de +20kg/m³ em CD em t=30s. Verifica dinâmica de concentração.",
+        "nome": "Cenário 2: Senoidal no Nível do Tanque C e Concentração do Tanque D",
+        "descricao": "Sinal senoidal em hC e CD. Verifica resposta dinâmica.",
     }
 
 
-def cenario_3_mudancas_combinadas(
-    tempo_total: float = 3000.0, dt: float = 0.5
-) -> Dict[str, np.ndarray]:
+def cenario_3(tempo_total: float = 3000.0, dt: float = 0.5) -> Dict[str, np.ndarray]:
     """
-    Cenário 3: Mudanças combinadas em múltiplos tanques
+    Cenário 3: Mudança de Nível e Concentração nos Tanques C, D e E
 
-    Objetivo: Verificar desempenho MIMO com mudanças simultâneas em nível
-    e concentração de diferentes tanques.
+    Objetivo: Testar coordenação MIMO com múltiplos degraus em tanques diferentes.
 
     Args:
         tempo_total: duração da simulação (s)
@@ -232,53 +259,35 @@ def cenario_3_mudancas_combinadas(
     Returns:
         Dicionário com perfis de referência
     """
+
     h_eq = params.PONTO_OPERACAO["h_eq"]
     C_eq = params.PONTO_OPERACAO["C_eq"]
 
-    # Tanque C: degrau em nível em t=60s
-    hC_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=60.0,
-        valor_inicial=h_eq,
-        valor_final=min(h_eq + 0.2, 1.7),
-    )
+    instantes_hC = [30.0, 400.0]
+    valores_hC = [h_eq, (h_eq + 0.2), h_eq]
 
-    # Tanque C: degrau em concentração em t=360s
-    CC_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=360.0,
-        valor_inicial=C_eq,
-        valor_final=min(C_eq + 20.0, 200.0),
-    )
+    instantes_CC = [30.0, 400.0]
+    valores_CC = [C_eq, (C_eq + 20.0), C_eq]
 
-    # Tanque D: ambos simultaneamente em t=720s
-    hD_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=720.0,
-        valor_inicial=h_eq,
-        valor_final=max(h_eq - 0.2, 1.3),
-    )
-    CD_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=720.0,
-        valor_inicial=C_eq,
-        valor_final=max(C_eq - 20.0, 150.0),
-    )
+    hC_ref = gerar_multiplos_degraus(tempo_total, dt, instantes_hC, valores_hC)
+    CC_ref = gerar_multiplos_degraus(tempo_total, dt, instantes_CC, valores_CC)
 
-    # Tanque E: rampa suave em t=1440s até t=1500s
-    hE_ref = gerar_rampa(
-        tempo_total,
-        dt,
-        t_inicio=1440.0,
-        t_fim=1500.0,
-        valor_inicial=h_eq,
-        valor_final=h_eq + 0.20,
-    )
-    CE_ref = np.ones(int(tempo_total / dt) + 1) * C_eq
+    instantes_hD = [30.0, 400.0]
+    valores_hD = [h_eq, (h_eq - 0.2), h_eq]
+
+    instantes_CD = [30.0, 400.0]
+    valores_CD = [C_eq, (C_eq - 20.0), C_eq]
+
+    hD_ref = gerar_multiplos_degraus(tempo_total, dt, instantes_hD, valores_hD)
+    CD_ref = gerar_multiplos_degraus(tempo_total, dt, instantes_CD, valores_CD)
+
+    instantes_hE = [30.0, 400.0]
+    valores_hE = [h_eq, (h_eq + 0.2), h_eq]
+
+    instantes_CE = [30.0, 400.0]
+    valores_CE = [C_eq, (C_eq - 20.0), C_eq]
+    hE_ref = gerar_multiplos_degraus(tempo_total, dt, instantes_hE, valores_hE)
+    CE_ref = gerar_multiplos_degraus(tempo_total, dt, instantes_CE, valores_CE)
 
     return {
         "hC_ref": hC_ref,
@@ -287,324 +296,12 @@ def cenario_3_mudancas_combinadas(
         "CD_ref": CD_ref,
         "hE_ref": hE_ref,
         "CE_ref": CE_ref,
-        "nome": "Cenário 3: Mudanças Combinadas MIMO",
+        "nome": "Cenário 3: Mudança de Nível e Concentração nos Tanques C, D e E",
         "descricao": "Múltiplos degraus em tanques diferentes. Testa coordenação MIMO.",
     }
 
 
-def cenario_3_degrau_nivel_concentracao(
-    tempo_total: float = 3000.0, dt: float = 0.5
-) -> Dict[str, np.ndarray]:
-    """
-    Cenário 3: Mudança de nível e concentração no Tanque C
-
-    Objetivo: Verificar a resposta do sistema a mudanças simultâneas de nível
-    e concentração no Tanque C.
-
-    Args:
-        tempo_total: duração da simulação (s)
-        dt: passo de integração (s)
-
-    Returns:
-        Dicionário com perfis de referência
-    """
-    h_eq = params.PONTO_OPERACAO["h_eq"]
-    C_eq = params.PONTO_OPERACAO["C_eq"]
-
-    # Tanque C: degrau em nível em t=30s
-    hC_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=30.0,
-        valor_inicial=h_eq,
-        valor_final=min(h_eq + 0.2, 1.7),
-    )
-
-    # Tanque C: degrau negativo em concentração em t=30s
-    CC_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=30.0,
-        valor_inicial=C_eq,
-        valor_final=min(C_eq - 20.0, 150.0),
-    )
-
-    # Mantém demais variáveis em equilíbrio
-    hD_ref = np.ones(int(tempo_total / dt) + 1) * h_eq
-    CD_ref = np.ones(int(tempo_total / dt) + 1) * C_eq
-    hE_ref = np.ones(int(tempo_total / dt) + 1) * h_eq
-    CE_ref = np.ones(int(tempo_total / dt) + 1) * C_eq
-
-    return {
-        "hC_ref": hC_ref,
-        "CC_ref": CC_ref,
-        "hD_ref": hD_ref,
-        "CD_ref": CD_ref,
-        "hE_ref": hE_ref,
-        "CE_ref": CE_ref,
-        "nome": "Cenário 3: Mudança de Nível e Concentração no Tanque C",
-        "descricao": "Múltiplos degraus em tanques diferentes. Testa coordenação MIMO.",
-    }
-
-
-def cenario_4_teste_limites(
-    tempo_total: float = 3000.0, dt: float = 0.5
-) -> Dict[str, np.ndarray]:
-    """
-    Cenário 4: Teste de respeito às restrições físicas (R4)
-
-    Objetivo: Verificar que o MPC respeita os limites de nível e concentração
-    mesmo com referências agressivas próximas aos limites operacionais.
-
-    Args:
-        tempo_total: duração da simulação (s)
-        dt: passo de integração (s)
-
-    Returns:
-        Dicionário com perfis de referência
-    """
-    h_eq = params.PONTO_OPERACAO["h_eq"]
-    C_eq = params.PONTO_OPERACAO["C_eq"]
-    h_max_seguro = params.LIMITES_NIVEL["h_max"]
-    h_min_seguro = params.LIMITES_NIVEL["h_min"]
-
-    # Tanque C: referência próxima ao limite máximo
-    hC_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=300.0,
-        valor_inicial=h_eq,
-        valor_final=h_max_seguro - 0.4,
-    )
-    CC_ref = np.ones(int(tempo_total / dt) + 1) * C_eq
-
-    # Tanque D: referência próxima ao limite mínimo
-    hD_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=300.0,
-        valor_inicial=h_eq,
-        valor_final=h_min_seguro + 0.4,
-    )
-    CD_ref = np.ones(int(tempo_total / dt) + 1) * C_eq
-
-    # Tanque E: concentração próxima aos limites
-    hE_ref = np.ones(int(tempo_total / dt) + 1) * h_eq
-    CE_ref = gerar_multiplos_degraus(
-        tempo_total, dt, instantes=[500.0, 1500.0], valores=[C_eq, 50.0, 320.0]
-    )
-
-    return {
-        "hC_ref": hC_ref,
-        "CC_ref": CC_ref,
-        "hD_ref": hD_ref,
-        "CD_ref": CD_ref,
-        "hE_ref": hE_ref,
-        "CE_ref": CE_ref,
-        "nome": "Cenário 4: Teste de Limites Operacionais",
-        "descricao": "Referências próximas aos limites físicos. Verifica R4 (restrições).",
-    }
-
-
-def cenario_4_nivel_concentracao_multiplos_tanques(
-    tempo_total: float = 3000.0, dt: float = 0.5
-) -> Dict[str, np.ndarray]:
-    """
-    Cenário 4: Mudanças simultâneas de nível e concentração em múltiplos tanques
-
-    Objetivo: Verificar a resposta do sistema a mudanças simultâneas de nível
-    e concentração em diferentes tanques.
-
-    Args:
-        tempo_total: duração da simulação (s)
-        dt: passo de integração (s)
-
-    Returns:
-        Dicionário com perfis de referência
-    """
-    h_eq = params.PONTO_OPERACAO["h_eq"]
-    C_eq = params.PONTO_OPERACAO["C_eq"]
-
-    # Tanque C: degrau em nível em t=30s
-    hC_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=30.0,
-        valor_inicial=h_eq,
-        valor_final=min(h_eq + 0.2, 1.7),
-    )
-
-    # Tanque C: degrau em concentração em t=30s
-    CC_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=30.0,
-        valor_inicial=C_eq,
-        valor_final=min(C_eq + 20.0, 200.0),
-    )
-
-    # Tanque D: ambos simultaneamente em t=30s
-    hD_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=30.0,
-        valor_inicial=h_eq,
-        valor_final=max(h_eq - 0.2, 1.3),
-    )
-    CD_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=30.0,
-        valor_inicial=C_eq,
-        valor_final=max(C_eq - 20.0, 150.0),
-    )
-
-    # Tanque E: degrau em nível em t=30s
-    hE_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=30.0,
-        valor_inicial=h_eq,
-        valor_final=min(h_eq + 0.3, 1.7),
-    )
-
-    # Tanque E: degrau em concentração em t=30s
-    CE_ref = gerar_degrau(
-        tempo_total,
-        dt,
-        t_degrau=30.0,
-        valor_inicial=C_eq,
-        valor_final=max(C_eq - 20.0, 150.0),
-    )
-
-    return {
-        "hC_ref": hC_ref,
-        "CC_ref": CC_ref,
-        "hD_ref": hD_ref,
-        "CD_ref": CD_ref,
-        "hE_ref": hE_ref,
-        "CE_ref": CE_ref,
-        "nome": "Cenário 4: Mudanças Simultâneas de Nível e Concentração",
-        "descricao": "Verifica a resposta do sistema a mudanças simultâneas em múltiplos tanques.",
-    }
-
-
-def cenario_5_rejeicao_perturbacao(
-    tempo_total: float = 3000.0, dt: float = 0.5
-) -> Dict[str, np.ndarray]:
-    """
-    Cenário 5: Teste de rastreamento com múltiplas mudanças de referência
-
-    Objetivo: Simular perfil de produção com múltiplas mudanças de setpoint,
-    verificando capacidade de rastreamento e erro em regime (R2).
-
-    Args:
-        tempo_total: duração da simulação (s)
-        dt: passo de integração (s)
-
-    Returns:
-        Dicionário com perfis de referência
-    """
-    h_eq = params.PONTO_OPERACAO["h_eq"]
-    C_eq = params.PONTO_OPERACAO["C_eq"]
-
-    # Sequência de setpoints para simular receita de produção (ajustados para limites)
-    instantes_h = [30.0, 130.0, 230.0, 330.0]
-    valores_h = [h_eq, 1.7, 1.3, 1.7, 1.5]
-
-    instantes_C = [40.0, 140.0, 240.0, 340.0]
-    valores_C = [C_eq, 200.0, 150.0, 200.0, 180.0]
-
-    # Tanque C com perfil variável
-    hC_ref = gerar_multiplos_degraus(tempo_total, dt, instantes_h, valores_h)
-    CC_ref = gerar_multiplos_degraus(tempo_total, dt, instantes_C, valores_C)
-
-    # Tanques D e E seguem perfil mais simples
-    hD_ref = gerar_degrau(
-        tempo_total, dt, t_degrau=30.0, valor_inicial=h_eq, valor_final=1.7
-    )
-    CD_ref = gerar_degrau(
-        tempo_total, dt, t_degrau=60.0, valor_inicial=C_eq, valor_final=195.0
-    )
-
-    hE_ref = np.ones(int(tempo_total / dt) + 1) * h_eq
-    CE_ref = np.ones(int(tempo_total / dt) + 1) * C_eq
-
-    return {
-        "hC_ref": hC_ref,
-        "CC_ref": CC_ref,
-        "hD_ref": hD_ref,
-        "CD_ref": CD_ref,
-        "hE_ref": hE_ref,
-        "CE_ref": CE_ref,
-        "nome": "Cenário 5: Perfil de Produção Variável",
-        "descricao": "Múltiplas mudanças sequenciais. Testa rastreamento e offset-free.",
-    }
-
-
-def cenario_6_validacao_completa(
-    tempo_total: float = 3000.0, dt: float = 0.5
-) -> Dict[str, np.ndarray]:
-    """
-    Cenário 6: Validação completa de todos os requisitos
-
-    Objetivo: Cenário integrado que exercita todos os aspectos do sistema
-    para demonstração final de desempenho.
-
-    Args:
-        tempo_total: duração da simulação (s)
-        dt: passo de integração (s)
-
-    Returns:
-        Dicionário com perfis de referência
-    """
-    h_eq = params.PONTO_OPERACAO["h_eq"]
-    C_eq = params.PONTO_OPERACAO["C_eq"]
-
-    # Perfis coordenados para todos os tanques
-    # Tanque C: variações moderadas em ambas as variáveis
-    hC_ref = gerar_multiplos_degraus(
-        tempo_total, dt, instantes=[400.0, 1200.0], valores=[h_eq, 1.65, 1.35]
-    )
-    CC_ref = gerar_multiplos_degraus(
-        tempo_total, dt, instantes=[700.0, 1800.0], valores=[C_eq, 200.0, 160.0]
-    )
-
-    # Tanque D: foco em concentração
-    hD_ref = np.ones(int(tempo_total / dt) + 1) * h_eq
-    CD_ref = gerar_rampa(
-        tempo_total,
-        dt,
-        t_inicio=500.0,
-        t_fim=800.0,
-        valor_inicial=C_eq,
-        valor_final=220.0,
-    )
-
-    # Tanque E: foco em nível
-    hE_ref = gerar_multiplos_degraus(
-        tempo_total,
-        dt,
-        instantes=[300.0, 1000.0, 2000.0],
-        valores=[h_eq, 1.75, 1.25, 1.60],
-    )
-    CE_ref = np.ones(int(tempo_total / dt) + 1) * C_eq
-
-    return {
-        "hC_ref": hC_ref,
-        "CC_ref": CC_ref,
-        "hD_ref": hD_ref,
-        "CD_ref": CD_ref,
-        "hE_ref": hE_ref,
-        "CE_ref": CE_ref,
-        "nome": "Cenário 6: Validação Completa R1-R4",
-        "descricao": "Cenário integrado exercitando todos os requisitos de desempenho.",
-    }
-
-
-# ==============================================================================
 # FUNÇÃO PRINCIPAL: SELEÇÃO DE CENÁRIOS
-# ==============================================================================
 
 
 def obter_cenario(
@@ -614,7 +311,7 @@ def obter_cenario(
     Retorna o cenário de teste especificado.
 
     Args:
-        numero_cenario: número do cenário (1-6)
+        numero_cenario: número do cenário (1-3)
         tempo_total: duração da simulação (s)
         dt: passo de integração (s)
 
@@ -622,19 +319,13 @@ def obter_cenario(
         Dicionário com perfis de referência e metadados do cenário
     """
     cenarios = {
-        1: cenario_1_degrau_nivel_unico,
-        2: cenario_2_degrau_concentracao_unico,
-        3: cenario_3_degrau_nivel_concentracao,
-        4: cenario_4_nivel_concentracao_multiplos_tanques,
-        5: cenario_5_rejeicao_perturbacao,
-        # 3: cenario_3_mudancas_combinadas,
-        # 4: cenario_4_teste_limites,
-        # 5: cenario_5_rejeicao_perturbacao,
-        # 6: cenario_6_validacao_completa,
+        1: cenario_1,
+        2: cenario_2,
+        3: cenario_3,
     }
 
     if numero_cenario not in cenarios:
-        raise ValueError(f"Cenário {numero_cenario} não existe. Escolha entre 1 e 6.")
+        raise ValueError(f"Cenário {numero_cenario} não existe. Escolha entre 1 e 3.")
 
     return cenarios[numero_cenario](tempo_total, dt)
 
@@ -644,118 +335,20 @@ def listar_cenarios():
     print("=" * 70)
     print("CENÁRIOS DE TESTE DISPONÍVEIS")
     print("=" * 70)
-    print("\n1. Degrau Único em Nível (Tanque C)")
-    print("   → Degrau de +0.2m em hC em t=30s .")
-    print("      CC, hD, CD, hE, CE permanecem constantes.\n")
 
-    print("2. Degrau Único em Concentração (Tanque D)")
-    print("   → Degrau de +20kg/m³ em CD em t=30s .")
-    print("      hC, CC, hD, hE, CE permanecem constantes.\n")
+    print("1. Degraus em hC (+0.2m), CD (+20kg/m³) e hE (-0.2m) em t=30s")
+    print("   → hC: degrau de +0.2m em t=30s (mantido); CC: constante.")
+    print("      hD: constante; CD: degrau de +20kg/m³ em t=30s (mantido).")
+    print("      hE: degrau de -0.2m em t=30s (mantido); CE: constante.\n")
 
-    print("3. Mudança de Nível e Concentração no Tanque C")
-    print("   → hC: degrau de +0.2m em t=30s; CC: degrau de -20kg/m³ em t=30s.")
-    print("      hD, CD, hE, CE permanecem constantes.\n")
+    print("2. Senoidal no Nível do Tanque C e Concentração do Tanque D")
+    print("   → hC: sinal senoidal com amplitude de 0.2m e período de 360s.")
+    print("      CD: sinal senoidal com amplitude de 20kg/m³ e período de 360s.")
+    print("      hE: rampa de +0.2m entre t=30s e t=400s.\n")
 
-    print("4. Mudança Simultânea de Nível e Concentração em Múltiplos Tanques")
+    print("3. Mudança de Nível e Concentração nos Tanques C, D e E")
     print("   → hC: degrau de +0.2m em t=30s; CC: degrau de +20kg/m³ em t=30s.")
     print("      hD: degrau de -0.2m em t=30s; CD: degrau de -20kg/m³ em t=30s.")
-    print("      hE: degrau de +0.3m em t=30s; CE: degrau de -20kg/m³ em t=30s.\n")
+    print("      hE: degrau de +0.2m em t=30s; CE: degrau de -20kg/m³ em t=30s.\n")
 
-    print("5. Perfil de Produção Variável")
-    print("   → hC: múltiplos degraus (1.7, 1.3, 1.7, 1.5m) em t=30, 130, 230, 330s.")
-    print(
-        "      CC: múltiplos degraus (200, 150, 200, 180kg/m³) em t=40, 140, 240, 340s."
-    )
-    print("      hD: degrau para 1.7m em t=30s; CD: degrau para 195kg/m³ em t=60s.")
-    print("      hE, CE permanecem constantes.\n")
-
-    # print("3. Mudanças Combinadas MIMO")
-    # print("   → hC: degrau de +0.2m em t=200s; CC: degrau de +20kg/m³ em t=800s.")
-    # print("      hD: degrau de -0.2m em t=1400s; CD: degrau de -20kg/m³ em t=1400s.")
-    # print("      hE: rampa de +0.3m de t=2000s a t=2200s; CE constante.\n")
-
-    # print("4. Teste de Limites Operacionais")
-    # print("   → hC: degrau para próximo do limite máximo (h_max - 0.4) em t=300s.")
-    # print("      hD: degrau para próximo do limite mínimo (h_min + 0.4) em t=300s.")
-    # print("      CE: degraus para 50kg/m³ em t=500s e 320kg/m³ em t=1500s.")
-    # print("      CC, CD, hE constantes.\n")
-
-    # print("5. Perfil de Produção Variável")
-    # print(
-    #     "   → hC: múltiplos degraus (1.7, 1.3, 1.7, 1.5m) em t=300, 900, 1500, 2100s."
-    # )
-    # print(
-    #     "      CC: múltiplos degraus (200, 150, 200, 180kg/m³) em t=400, 1000, 1600, 2200s."
-    # )
-    # print("      hD: degrau para 1.7m em t=600s; CD: degrau para 195kg/m³ em t=1200s.")
-    # print("      hE, CE constantes.\n")
-
-    # print("6. Validação Completa R1-R4")
-    # print("   → hC: degraus para 1.65m em t=400s e 1.35m em t=1200s.")
-    # print("      CC: degraus para 200kg/m³ em t=700s e 160kg/m³ em t=1800s.")
-    # print("      hD constante; CD: rampa de C_eq até 220kg/m³ de t=500s a t=800s.")
-    # print(
-    #     "      hE: degraus para 1.75m, 1.25m, 1.60m em t=300, 1000, 2000s; CE constante.\n"
-    # )
-
-    print("=" * 70)
-
-
-# ==============================================================================
-# TESTES
-# ==============================================================================
-
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-
-    print("=" * 70)
-    print("TESTE DOS CENÁRIOS DE REFERÊNCIA")
-    print("=" * 70)
-
-    # Lista cenários disponíveis
-    listar_cenarios()
-
-    # Gera e plota o Cenário 3 como exemplo
-    print("\nGerando Cenário 3 (Mudanças Combinadas)...")
-    cenario = obter_cenario(3, tempo_total=3000.0, dt=0.5)
-
-    tempo = np.arange(0, 3000.0 + 0.5, 0.5)
-
-    # Plot
-    fig, axes = plt.subplots(3, 2, figsize=(12, 10))
-    fig.suptitle(cenario["nome"], fontsize=14, fontweight="bold")
-
-    tanques = ["C", "D", "E"]
-    for i, tanque in enumerate(tanques):
-        # Nível
-        axes[i, 0].plot(tempo, cenario[f"h{tanque}_ref"], "b-", linewidth=2)
-        axes[i, 0].set_ylabel(f"h{tanque} [m]", fontsize=11)
-        axes[i, 0].grid(True, alpha=0.3)
-        axes[i, 0].axhline(
-            y=params.LIMITES_NIVEL["h_max"],
-            color="r",
-            linestyle="--",
-            alpha=0.5,
-            label="Limite máx",
-        )
-        axes[i, 0].axhline(
-            y=params.LIMITES_NIVEL["h_min"],
-            color="r",
-            linestyle="--",
-            alpha=0.5,
-            label="Limite mín",
-        )
-
-        # Concentração
-        axes[i, 1].plot(tempo, cenario[f"C{tanque}_ref"], "g-", linewidth=2)
-        axes[i, 1].set_ylabel(f"C{tanque} [kg/m³]", fontsize=11)
-        axes[i, 1].grid(True, alpha=0.3)
-
-    axes[2, 0].set_xlabel("Tempo [s]", fontsize=11)
-    axes[2, 1].set_xlabel("Tempo [s]", fontsize=11)
-
-    plt.tight_layout()
-    plt.show()
-
-    print(f"\n{cenario['descricao']}")
     print("=" * 70)

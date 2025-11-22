@@ -1,6 +1,4 @@
 """
-main.py
-
 Ponto de entrada principal para a simulação do sistema de controle MPC
 de tanques tronco-cônicos.
 
@@ -15,21 +13,19 @@ Uso:
 
 Projeto: Sistema de Controle MPC para Tanques Tronco-Cônicos
 Disciplina: Técnicas de Controle de Processos Industriais
-Baseado na Entrega 3 - Proposta da Estrutura de Controle
 """
 
 import os
 import sys
-from typing import Optional
 import warnings
 
-# Suprime warnings de otimização do CVXPY (opcional)
+# Suprime warnings de otimização do CVXPY
 warnings.filterwarnings("ignore")
 
 # Importa módulos do projeto
 import parametros_sistema as params
 import cenarios_teste
-from simulacao_principal import executar_simulacao, executar_todos_cenarios
+from simulacao_principal import executar_simulacao
 from visualizacao_resultados import (
     plotar_niveis,
     plotar_concentracoes,
@@ -40,9 +36,7 @@ from visualizacao_resultados import (
 )
 
 
-# ==============================================================================
 # BANNER E INTERFACE
-# ==============================================================================
 
 
 def exibir_banner():
@@ -69,10 +63,9 @@ def exibir_menu_principal():
     print("MENU PRINCIPAL")
     print("=" * 70)
     print("\n1. Executar cenário específico")
-    print("2. Executar todos os cenários (1-6)")
-    print("3. Listar cenários disponíveis")
-    print("4. Configurar parâmetros de simulação")
-    print("5. Sobre o sistema")
+    print("2. Listar cenários disponíveis")
+    print("3. Configurar parâmetros de simulação")
+    print("4. Sobre o sistema")
     print("0. Sair")
     print("\n" + "=" * 70)
 
@@ -122,9 +115,7 @@ def exibir_sobre():
     input("\nPressione ENTER para voltar ao menu...")
 
 
-# ==============================================================================
 # FUNÇÕES DE EXECUÇÃO
-# ==============================================================================
 
 
 def executar_cenario_especifico():
@@ -138,12 +129,12 @@ def executar_cenario_especifico():
 
     # Solicita escolha
     try:
-        num_cenario = int(input("\nEscolha o número do cenário (1-6): "))
+        num_cenario = int(input("\nEscolha o número do cenário: "))
         if num_cenario < 1 or num_cenario > 6:
-            print("❌ Número de cenário inválido!")
+            print("Número de cenário inválido!")
             return
     except ValueError:
-        print("❌ Entrada inválida!")
+        print("Entrada inválida!")
         return
 
     # Solicita tempo de simulação
@@ -155,7 +146,7 @@ def executar_cenario_especifico():
         try:
             tempo_total = float(input("Digite o tempo total de simulação (s): "))
         except ValueError:
-            print("❌ Valor inválido! Usando tempo padrão.")
+            print("Valor inválido! Usando tempo padrão.")
             tempo_total = params.TEMPO_TOTAL
     else:
         tempo_total = params.TEMPO_TOTAL
@@ -171,73 +162,6 @@ def executar_cenario_especifico():
 
     # Menu de pós-processamento
     pos_processar_resultados(resultados, num_cenario)
-
-
-def executar_todos_cenarios_menu():
-    """Executa todos os cenários disponíveis."""
-    print("\n" + "=" * 70)
-    print("EXECUÇÃO DE TODOS OS CENÁRIOS")
-    print("=" * 70)
-
-    # Solicita tempo de simulação
-    usar_padrao = (
-        input(f"\nUsar tempo padrão ({params.TEMPO_TOTAL}s) para todos? (S/n): ")
-        .strip()
-        .lower()
-    )
-
-    if usar_padrao in ["n", "nao", "não"]:
-        try:
-            tempo_total = float(input("Digite o tempo total de simulação (s): "))
-        except ValueError:
-            print("❌ Valor inválido! Usando tempo padrão.")
-            tempo_total = params.TEMPO_TOTAL
-    else:
-        tempo_total = params.TEMPO_TOTAL
-
-    # Confirmação
-    confirmar = (
-        input(
-            f"\nIsto executará 6 simulações (~{6*tempo_total/60:.1f} min). Continuar? (S/n): "
-        )
-        .strip()
-        .lower()
-    )
-
-    if confirmar in ["n", "nao", "não"]:
-        print("Operação cancelada.")
-        return
-
-    # Executa todos os cenários
-    resultados_todos = executar_todos_cenarios(tempo_total=tempo_total, verbose=False)
-
-    print("\n" + "=" * 70)
-    print("RESUMO DE DESEMPENHO - TODOS OS CENÁRIOS")
-    print("=" * 70)
-
-    # Analisa cada cenário
-    for i in range(1, 7):
-        print(f"\n>>> Cenário {i} <<<")
-        metricas = analisar_desempenho(resultados_todos[i], verbose=False)
-
-        # Exibe apenas status de conformidade
-        print("Requisitos:")
-        for req in ["R1", "R2", "R3", "R4"]:
-            status = "✓" if metricas["conformidade"][req]["status"] else "✗"
-            print(f"  {req}: {status}")
-
-    print("\n" + "=" * 70)
-
-    # Opção de salvar
-    salvar = (
-        input("\nDeseja exportar todos os resultados para CSV? (s/N): ").strip().lower()
-    )
-    if salvar in ["s", "sim"]:
-        for i in range(1, 7):
-            exportar_para_csv(resultados_todos[i], f"cenario_{i}_resultados.csv")
-        print("✓ Todos os resultados foram exportados!")
-
-    input("\nPressione ENTER para voltar ao menu...")
 
 
 def pos_processar_resultados(resultados: dict, num_cenario: int):
@@ -304,23 +228,18 @@ def pos_processar_resultados(resultados: dict, num_cenario: int):
         elif opcao == "0":
             break
         else:
-            print("❌ Opção inválida!")
+            print("Opção inválida!")
 
 
-# ==============================================================================
-# FUNÇÃO PRINCIPAL
-# ==============================================================================
+# FUNÇÃO PRINCIPAL E EXECUÇÃO DO PROGRAMA DE SIMULAÇÃO
 
 
 def main():
     """Função principal do programa."""
-    # Limpa terminal (opcional)
-    os.system("cls" if os.name == "nt" else "clear")
 
-    # Exibe banner
+    os.system("cls" if os.name == "nt" else "clear")
     exibir_banner()
 
-    # Loop principal do menu
     while True:
         exibir_menu_principal()
 
@@ -329,38 +248,32 @@ def main():
         if opcao == "1":
             executar_cenario_especifico()
         elif opcao == "2":
-            executar_todos_cenarios_menu()
-        elif opcao == "3":
             listar_cenarios_menu()
-        elif opcao == "4":
+        elif opcao == "3":
             print(
-                "\n⚠️  Configuração de parâmetros deve ser feita editando parametros_sistema.py"
+                "\nConfiguração de parâmetros deve ser feita editando parametros_sistema.py"
             )
             input("\nPressione ENTER para continuar...")
-        elif opcao == "5":
+        elif opcao == "4":
             exibir_sobre()
         elif opcao == "0":
             print("\n" + "=" * 70)
-            print("Encerrando o sistema. Até logo!")
+            print("Encerrando o sistema.")
             print("=" * 70 + "\n")
             sys.exit(0)
         else:
-            print("\n❌ Opção inválida! Tente novamente.")
+            print("\nOpção inválida! Tente novamente.")
 
-
-# ==============================================================================
-# EXECUÇÃO DIRETA
-# ==============================================================================
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrompido pelo usuário (Ctrl+C)")
+        print("\n\nInterrompido pelo usuário (Ctrl+C)")
         print("Encerrando o sistema...\n")
         sys.exit(0)
     except Exception as e:
-        print(f"\n❌ ERRO CRÍTICO: {e}")
+        print(f"\nERRO CRÍTICO: {e}")
         print("Por favor, verifique os arquivos de configuração e dependências.")
         import traceback
 
