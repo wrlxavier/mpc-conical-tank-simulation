@@ -1,0 +1,281 @@
+"""
+Ponto de entrada principal para a simulação do sistema de controle MPC
+de tanques tronco-cônicos.
+
+Este arquivo fornece uma interface simples e interativa para:
+- Selecionar e executar cenários de teste
+- Visualizar resultados
+- Gerar relatórios de desempenho
+- Exportar dados para análise posterior
+
+Uso:
+    python main.py
+
+Projeto: Sistema de Controle MPC para Tanques Tronco-Cônicos
+Disciplina: Técnicas de Controle de Processos Industriais
+"""
+
+import os
+import sys
+import warnings
+
+# Suprime warnings de otimização do CVXPY
+warnings.filterwarnings("ignore")
+
+# Importa módulos do projeto
+import parametros_sistema as params
+import cenarios_teste
+from simulacao_principal import executar_simulacao
+from visualizacao_resultados import (
+    plotar_niveis,
+    plotar_concentracoes,
+    plotar_controles,
+    plotar_resumo_completo,
+    analisar_desempenho,
+    exportar_para_csv,
+)
+
+
+# BANNER E INTERFACE
+
+
+def exibir_banner():
+    """Exibe banner de apresentação do sistema."""
+    banner = """
+    ╔══════════════════════════════════════════════════════════════════════╗
+    ║                                                                      ║
+    ║        SIMULAÇÃO DE CONTROLE MPC PARA TANQUES TRONCO-CÔNICOS        ║
+    ║                                                                      ║
+    ║  Sistema de 5 tanques (2 cilíndricos + 3 tronco-cônicos)            ║
+    ║  Controle MPC multivarável de nível e concentração                  ║
+    ║                                                                      ║
+    ║  Disciplina: Técnicas de Controle de Processos Industriais          ║
+    ║  Universidade Federal de Minas Gerais - UFMG                        ║
+    ║                                                                      ║
+    ╚══════════════════════════════════════════════════════════════════════╝
+    """
+    print(banner)
+
+
+def exibir_menu_principal():
+    """Exibe menu de opções do sistema."""
+    print("\n" + "=" * 70)
+    print("MENU PRINCIPAL")
+    print("=" * 70)
+    print("\n1. Executar cenário específico")
+    print("2. Listar cenários disponíveis")
+    print("3. Configurar parâmetros de simulação")
+    print("4. Sobre o sistema")
+    print("0. Sair")
+    print("\n" + "=" * 70)
+
+
+def listar_cenarios_menu():
+    """Lista cenários disponíveis de forma interativa."""
+    cenarios_teste.listar_cenarios()
+    input("\nPressione ENTER para voltar ao menu...")
+
+
+def exibir_sobre():
+    """Exibe informações sobre o sistema."""
+    print("\n" + "=" * 70)
+    print("SOBRE O SISTEMA")
+    print("=" * 70)
+    print(f"\n{params.INFO_SISTEMA['descricao']}")
+    print(f"\nVersão: {params.INFO_SISTEMA['versao']}")
+    print(f"Data: {params.INFO_SISTEMA['data']}")
+    print(f"Disciplina: {params.INFO_SISTEMA['disciplina']}")
+    print("\nArquitetura do Sistema:")
+    print("  - parametros_sistema.py: Parâmetros físicos e de controle")
+    print("  - modelo_tanques.py: Modelo fenomenológico não-linear")
+    print("  - controlador_mpc.py: Controlador MPC com otimização convexa")
+    print("  - cenarios_teste.py: Cenários de validação R1-R4")
+    print("  - simulacao_principal.py: Orquestrador da simulação")
+    print("  - visualizacao_resultados.py: Análise e gráficos")
+    print("  - main.py: Interface de usuário")
+    print("\nConstantes de Tempo:")
+    print(
+        f"  - Nível (τ_h): {params.CONSTANTES_TEMPO['tau_h']}s "
+        f"(~{params.CONSTANTES_TEMPO['tau_h']/60:.1f} min)"
+    )
+    print(
+        f"  - Concentração (τ_C): {params.CONSTANTES_TEMPO['tau_C']}s "
+        f"(~{params.CONSTANTES_TEMPO['tau_C']/60:.1f} min)"
+    )
+    print("\nHorizontes MPC:")
+    print(
+        f"  - Predição (Np): {params.MPC_HORIZONTES['Np']} amostras "
+        f"({params.MPC_HORIZONTES['Np']*params.TS_CONTROLADOR}s)"
+    )
+    print(
+        f"  - Controle (Nc): {params.MPC_HORIZONTES['Nc']} amostras "
+        f"({params.MPC_HORIZONTES['Nc']*params.TS_CONTROLADOR}s)"
+    )
+    print("\n" + "=" * 70)
+    input("\nPressione ENTER para voltar ao menu...")
+
+
+# FUNÇÕES DE EXECUÇÃO
+
+
+def executar_cenario_especifico():
+    """Executa um cenário específico escolhido pelo usuário."""
+    print("\n" + "=" * 70)
+    print("EXECUÇÃO DE CENÁRIO ESPECÍFICO")
+    print("=" * 70)
+
+    # Lista cenários
+    cenarios_teste.listar_cenarios()
+
+    # Solicita escolha
+    try:
+        num_cenario = int(input("\nEscolha o número do cenário: "))
+        if num_cenario < 1 or num_cenario > 6:
+            print("Número de cenário inválido!")
+            return
+    except ValueError:
+        print("Entrada inválida!")
+        return
+
+    # Solicita tempo de simulação
+    usar_padrao = (
+        input(f"\nUsar tempo padrão ({params.TEMPO_TOTAL}s)? (S/n): ").strip().lower()
+    )
+
+    if usar_padrao in ["n", "nao", "não"]:
+        try:
+            tempo_total = float(input("Digite o tempo total de simulação (s): "))
+        except ValueError:
+            print("Valor inválido! Usando tempo padrão.")
+            tempo_total = params.TEMPO_TOTAL
+    else:
+        tempo_total = params.TEMPO_TOTAL
+
+    # Executa simulação
+    print(f"\n{'='*70}")
+    print(f"EXECUTANDO CENÁRIO {num_cenario}")
+    print(f"{'='*70}\n")
+
+    resultados = executar_simulacao(
+        numero_cenario=num_cenario, tempo_total=tempo_total, verbose=False
+    )
+
+    # Menu de pós-processamento
+    pos_processar_resultados(resultados, num_cenario)
+
+
+def pos_processar_resultados(resultados: dict, num_cenario: int):
+    """Menu de pós-processamento após simulação."""
+    while True:
+        print("\n" + "=" * 70)
+        print("PÓS-PROCESSAMENTO DOS RESULTADOS")
+        print("=" * 70)
+        print("\n1. Visualizar gráficos de níveis")
+        print("2. Visualizar gráficos de concentrações")
+        print("3. Visualizar gráficos de controles")
+        print("4. Visualizar resumo completo")
+        print("5. Gerar relatório de desempenho")
+        print("6. Exportar dados para CSV")
+        print("7. Executar todas as análises")
+        print("0. Voltar ao menu principal")
+        print("\n" + "=" * 70)
+
+        opcao = input("\nEscolha uma opção: ").strip()
+
+        if opcao == "1":
+            nome_arquivo = f"cenario_{num_cenario}/cenario_{num_cenario}_niveis.png"
+            plotar_niveis(resultados, nome_arquivo=nome_arquivo)
+        elif opcao == "2":
+            nome_arquivo = (
+                f"cenario_{num_cenario}/cenario_{num_cenario}_concentracoes.png"
+            )
+            plotar_concentracoes(resultados, nome_arquivo=nome_arquivo)
+        elif opcao == "3":
+            nome_arquivo = f"cenario_{num_cenario}/cenario_{num_cenario}_controles.png"
+            plotar_controles(resultados, nome_arquivo=nome_arquivo)
+        elif opcao == "4":
+            nome_arquivo = f"cenario_{num_cenario}/cenario_{num_cenario}_resumo.png"
+            plotar_resumo_completo(resultados, nome_arquivo=nome_arquivo)
+        elif opcao == "5":
+            analisar_desempenho(
+                resultados,
+                verbose=True,
+                salvar=True,
+                nome_arquivo=f"cenario_{num_cenario}/cenario_{num_cenario}_relatorio_desempenho.txt",
+            )
+            input("\nPressione ENTER para continuar...")
+        elif opcao == "6":
+            nome_arquivo = f"cenario_{num_cenario}/cenario_{num_cenario}_resultados.csv"
+            exportar_para_csv(resultados, nome_arquivo)
+            input("\nPressione ENTER para continuar...")
+        elif opcao == "7":
+            print("\nExecutando todas as análises...\n")
+            nome_arquivo = (
+                f"cenario_{num_cenario}/cenario_{num_cenario}_resumo_completo.png"
+            )
+            plotar_resumo_completo(resultados, nome_arquivo=nome_arquivo)
+            analisar_desempenho(
+                resultados,
+                verbose=True,
+                salvar=True,
+                nome_arquivo=f"cenario_{num_cenario}/cenario_{num_cenario}_relatorio_desempenho.txt",
+            )
+            exportar_para_csv(
+                resultados,
+                f"cenario_{num_cenario}/cenario_{num_cenario}_resultados.csv",
+            )
+            input("\nPressione ENTER para continuar...")
+        elif opcao == "0":
+            break
+        else:
+            print("Opção inválida!")
+
+
+# FUNÇÃO PRINCIPAL E EXECUÇÃO DO PROGRAMA DE SIMULAÇÃO
+
+
+def main():
+    """Função principal do programa."""
+
+    os.system("cls" if os.name == "nt" else "clear")
+    exibir_banner()
+
+    while True:
+        exibir_menu_principal()
+
+        opcao = input("\nEscolha uma opção: ").strip()
+
+        if opcao == "1":
+            executar_cenario_especifico()
+        elif opcao == "2":
+            listar_cenarios_menu()
+        elif opcao == "3":
+            print(
+                "\nConfiguração de parâmetros deve ser feita editando parametros_sistema.py"
+            )
+            input("\nPressione ENTER para continuar...")
+        elif opcao == "4":
+            exibir_sobre()
+        elif opcao == "0":
+            print("\n" + "=" * 70)
+            print("Encerrando o sistema.")
+            print("=" * 70 + "\n")
+            sys.exit(0)
+        else:
+            print("\nOpção inválida! Tente novamente.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\nInterrompido pelo usuário (Ctrl+C)")
+        print("Encerrando o sistema...\n")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\nERRO CRÍTICO: {e}")
+        print("Por favor, verifique os arquivos de configuração e dependências.")
+        import traceback
+
+        traceback.print_exc()
+        sys.exit(1)
